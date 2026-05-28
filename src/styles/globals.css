@@ -1,0 +1,58 @@
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+
+body {
+  font-family: 'DM Sans', sans-serif;
+  background: #060609;
+  color: #f0f1ff;
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse 80% 60% at 50% -8%, rgba(157,111,255,0.08) 0%, transparent 55%),
+    radial-gradient(ellipse 55% 45% at 0% 50%, rgba(77,159,255,0.06) 0%, transparent 55%),
+    radial-gradient(ellipse 55% 45% at 100% 60%, rgba(0,200,150,0.05) 0%, transparent 55%),
+    radial-gradient(ellipse 65% 55% at 50% 108%, rgba(240,180,41,0.06) 0%, transparent 55%);
+  animation: ambientDrift 30s ease-in-out infinite alternate;
+}
+
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.5;
+  background-image:
+    linear-gradient(rgba(255,255,255,0.017) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.017) 1px, transparent 1px);
+  background-size: 54px 54px;
+  mask-image: radial-gradient(ellipse 140% 55% at 50% 0%, black 0%, transparent 70%);
+  -webkit-mask-image: radial-gradient(ellipse 140% 55% at 50% 0%, black 0%, transparent 70%);
+}
+
+@keyframes ambientDrift {
+  0%   { transform: translate(0,0) scale(1); }
+  33%  { transform: translate(22px,-32px) scale(1.03); }
+  66%  { transform: translate(-14px,16px) scale(0.97); }
+  100% { transform: translate(10px,22px) scale(1.02); }
+}
+
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #282940; border-radius: 4px; }
+::selection { background: rgba(240,180,41,0.25); color: #f0f1ff; }
+
+#root {
+  position: relative;
+  z-index: 1;
+  min-height: 100vh;
+}
