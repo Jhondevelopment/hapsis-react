@@ -5,7 +5,7 @@ export default {
     extend: {
       fontFamily: {
         head: ['Syne', 'sans-serif'],
-        body: ['DM Sans', 'sans-serif'],
+        body: ['"Plus Jakarta Sans"', 'sans-serif'],
       },
       colors: {
         bg:       '#060609',

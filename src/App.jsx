@@ -23,6 +23,7 @@ import { PerfilPage }        from './pages/PerfilPage'
 import { AvisosPage }        from './pages/AvisosPage'
 import { BonusPage }         from './pages/BonusPage'
 import { IntelPage }         from './pages/IntelPage'
+import { PosVendaPage }      from './pages/PosVendaPage'
 import { Topbar }            from './components/layout/Topbar'
 import { Sidebar }           from './components/layout/Sidebar'
 import { ChatIA }            from './components/features/ChatIA'
@@ -32,10 +33,8 @@ function PlaceholderPage({ tab }) {
     <motion.div key={tab} initial={{ opacity:0, y:8 }} animate={{ opacity:1, y:0 }}
       style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', height:256, gap:16 }}>
       <div style={{ width:64, height:64, borderRadius:16, background:'rgba(240,180,41,0.10)', border:'1px solid rgba(240,180,41,0.20)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:28 }}>🚧</div>
-      <div style={{ textAlign:'center' }}>
-        <h3 style={{ fontFamily:'Syne,sans-serif', fontWeight:700, fontSize:18, color:'#fff' }}>{tab}</h3>
-        <p style={{ fontSize:13, color:'#4c5070', marginTop:4 }}>Em breve disponível.</p>
-      </div>
+      <h3 style={{ fontFamily:'Syne,sans-serif', fontWeight:700, fontSize:18, color:'#fff' }}>{tab}</h3>
+      <p style={{ fontSize:13, color:'#4c5070', marginTop:4 }}>Em breve disponível.</p>
     </motion.div>
   )
 }
@@ -48,26 +47,27 @@ function AppShell({ perfil, onSignOut }) {
       case 'dashboard':     return <DashboardPage    perfil={perfil} />
       case 'pipeline':      return <PipelinePage     perfil={perfil} />
       case 'clientes':      return <ClientesPage     perfil={perfil} />
-      case 'agenda':        return <AgendaPage       perfil={perfil} />
-      case 'arena':         return <ArenaPage        perfil={perfil} />
-      case 'relatorio':     return <RelatorioPage    perfil={perfil} />
-      case 'avisos':        return <AvisosPage       perfil={perfil} />
-      case 'aprovacoes':    return <AprovacoesPage   perfil={perfil} />
+      case 'agenda':        return <AgendaPage        perfil={perfil} />
+      case 'arena':         return <ArenaPage         perfil={perfil} />
+      case 'relatorio':     return <RelatorioPage     perfil={perfil} />
+      case 'avisos':        return <AvisosPage        perfil={perfil} />
+      case 'bonus':         return <BonusPage         perfil={perfil} />
+      case 'pos-venda':     return <PosVendaPage      perfil={perfil} />
+      case 'aprovacoes':    return <AprovacoesPage    perfil={perfil} />
       case 'inadimplencia': return <InadimplenciaPage perfil={perfil} />
-      case 'caixa':         return <CaixaPage        perfil={perfil} />
-      case 'despesas':      return <DespesasPage     perfil={perfil} />
-      case 'mrr':           return <MRRPage          perfil={perfil} />
-      case 'equipes':       return <EquipesPage      perfil={perfil} />
-      case 'produtos':      return <ProdutosPage     perfil={perfil} />
-      case 'okrs':          return <OKRsPage         perfil={perfil} />
-      case 'playbook':      return <PlaybookPage     perfil={perfil} />
-      case 'bonus':         return <BonusPage        perfil={perfil} />
-      case 'intel-hub':     return <IntelPage        perfil={perfil} abaInicial='hub' />
-      case 'intel-mov':     return <IntelPage        perfil={perfil} abaInicial='mov' />
-      case 'ia-preditiva':  return <IAPreditivaPage  perfil={perfil} />
-      case 'exportacao':    return <ExportacaoPage   perfil={perfil} />
-      case 'perfil':        return <PerfilPage       perfil={perfil} />
-      default:              return <PlaceholderPage  tab={activeTab} />
+      case 'caixa':         return <CaixaPage         perfil={perfil} />
+      case 'despesas':      return <DespesasPage      perfil={perfil} />
+      case 'mrr':           return <MRRPage           perfil={perfil} />
+      case 'equipes':       return <EquipesPage       perfil={perfil} />
+      case 'produtos':      return <ProdutosPage      perfil={perfil} />
+      case 'okrs':          return <OKRsPage          perfil={perfil} />
+      case 'playbook':      return <PlaybookPage      perfil={perfil} />
+      case 'intel-hub':     return <IntelPage         perfil={perfil} abaInicial="hub" />
+      case 'intel-mov':     return <IntelPage         perfil={perfil} abaInicial="mov" />
+      case 'ia-preditiva':  return <IAPreditivaPage   perfil={perfil} />
+      case 'exportacao':    return <ExportacaoPage    perfil={perfil} />
+      case 'perfil':        return <PerfilPage        perfil={perfil} />
+      default:              return <PlaceholderPage   tab={activeTab} />
     }
   }
 

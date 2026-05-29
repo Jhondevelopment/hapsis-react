@@ -343,14 +343,17 @@ function DrawerLead({ lead, perfil, onFechar, onSalvar, onDeletar, onRecarregar,
                   {/* Status — bloqueado para vendedor se fechado */}
                   <div style={{marginBottom:14}}>
                     <label style={{display:'block',fontSize:11,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.6px',color:'#4c5070',marginBottom:7}}>Status</label>
-                    {!isNovo&&isFechado&&!isGestor ? (
-                      <div style={{width:'100%',background:'rgba(0,200,150,0.06)',border:'1px solid rgba(0,200,150,0.22)',borderRadius:10,padding:'11px 15px',fontSize:14,color:'#00c896',display:'flex',alignItems:'center',gap:8}}>
-                        🔒 Fechado — apenas o gestor pode alterar
+                    {!isNovo && (isFechado || lead?.status==='Perdidos') ? (
+                      <div style={{width:'100%',background: isFechado?'rgba(0,200,150,0.06)':'rgba(255,77,106,0.06)',
+                        border:`1px solid ${isFechado?'rgba(0,200,150,0.22)':'rgba(255,77,106,0.22)'}`,
+                        borderRadius:10,padding:'11px 15px',fontSize:14,
+                        color:isFechado?'#00c896':'#ff4d6a',display:'flex',alignItems:'center',gap:8}}>
+                        🔒 {isFechado?'Fechado':'Perdido'} — status não pode ser alterado
                       </div>
                     ) : (
                       <select value={form.status} onChange={e=>set('status',e.target.value)}
                         style={{width:'100%',background:'#0d1117',border:'1px solid rgba(255,255,255,0.10)',borderRadius:10,padding:'11px 15px',fontSize:14,color:'#f0f1ff',outline:'none'}}>
-                        {COLUNAS.map(c=><option key={c.id} value={c.id}>{c.label}</option>)}
+                        {COLUNAS.filter(col=>col.id!=='Fechados'&&col.id!=='Perdidos').map(c=><option key={c.id} value={c.id}>{c.label}</option>)}
                       </select>
                     )}
                   </div>
@@ -547,12 +550,12 @@ function DrawerLead({ lead, perfil, onFechar, onSalvar, onDeletar, onRecarregar,
 function LeadCard({ lead, onAbrir, onAbrirWpp, perfil }) {
   const cor = {Fechados:'#00c896',Perdidos:'#ff4d6a',Novos:'#4d9fff',Negociacao:'#ff8c42',Contato:'#f0b429'}[lead.status]||'#4c5070'
 
-  // Aprovado = card imóvel (gestor aprovou → não mexe mais)
+  // Aprovado = card imóvel (gestor aprovou)
   const aprovado  = lead.status==='Fechados' && lead.aprovado===true  && !lead.estornado
-  // Pendente = card cinzento (foi para fechados mas aguarda aprovação)
+  // Pendente = card cinzento (aguarda aprovação)
   const pendente  = lead.status==='Fechados' && (lead.aprovado===false||lead.aprovado===null) && !lead.estornado
-  // Bloqueado para vendedor se fechado
-  const bloqueado = aprovado || (perfil?.role==='vendedor' && lead.status==='Fechados')
+  // REGRA: Fechados e Perdidos são SEMPRE bloqueados — ninguém move
+  const bloqueado = lead.status==='Fechados' || lead.status==='Perdidos'
 
   return(
     <motion.div layout
