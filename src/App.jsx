@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { AnimatePresence, motion } from 'framer-motion'
+import { useState, useCallback } from 'react'
+import { motion } from 'framer-motion'
 import { useAuth }           from './hooks/useAuth'
 import { LoginPage }         from './pages/LoginPage'
 import { DashboardPage }     from './pages/DashboardPage'
@@ -30,46 +30,45 @@ import { ChatIA }            from './components/features/ChatIA'
 
 function PlaceholderPage({ tab }) {
   return (
-    <motion.div key={tab} initial={{ opacity:0, y:8 }} animate={{ opacity:1, y:0 }}
-      style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', height:256, gap:16 }}>
+    <div style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', height:256, gap:16 }}>
       <div style={{ width:64, height:64, borderRadius:16, background:'rgba(240,180,41,0.10)', border:'1px solid rgba(240,180,41,0.20)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:28 }}>🚧</div>
       <h3 style={{ fontFamily:'Syne,sans-serif', fontWeight:700, fontSize:18, color:'#fff' }}>{tab}</h3>
       <p style={{ fontSize:13, color:'#4c5070', marginTop:4 }}>Em breve disponível.</p>
-    </motion.div>
+    </div>
   )
 }
 
 function AppShell({ perfil, onSignOut }) {
   const [activeTab, setActiveTab] = useState('dashboard')
 
-  function renderPage() {
+  const renderPage = useCallback(() => {
     switch (activeTab) {
-      case 'dashboard':     return <DashboardPage    perfil={perfil} />
-      case 'pipeline':      return <PipelinePage     perfil={perfil} />
-      case 'clientes':      return <ClientesPage     perfil={perfil} />
-      case 'agenda':        return <AgendaPage        perfil={perfil} />
-      case 'arena':         return <ArenaPage         perfil={perfil} />
-      case 'relatorio':     return <RelatorioPage     perfil={perfil} />
-      case 'avisos':        return <AvisosPage        perfil={perfil} />
-      case 'bonus':         return <BonusPage         perfil={perfil} />
-      case 'pos-venda':     return <PosVendaPage      perfil={perfil} />
-      case 'aprovacoes':    return <AprovacoesPage    perfil={perfil} />
-      case 'inadimplencia': return <InadimplenciaPage perfil={perfil} />
-      case 'caixa':         return <CaixaPage         perfil={perfil} />
-      case 'despesas':      return <DespesasPage      perfil={perfil} />
-      case 'mrr':           return <MRRPage           perfil={perfil} />
-      case 'equipes':       return <EquipesPage       perfil={perfil} />
-      case 'produtos':      return <ProdutosPage      perfil={perfil} />
-      case 'okrs':          return <OKRsPage          perfil={perfil} />
-      case 'playbook':      return <PlaybookPage      perfil={perfil} />
-      case 'intel-hub':     return <IntelPage         perfil={perfil} abaInicial="hub" />
-      case 'intel-mov':     return <IntelPage         perfil={perfil} abaInicial="mov" />
-      case 'ia-preditiva':  return <IAPreditivaPage   perfil={perfil} />
-      case 'exportacao':    return <ExportacaoPage    perfil={perfil} />
-      case 'perfil':        return <PerfilPage        perfil={perfil} />
-      default:              return <PlaceholderPage   tab={activeTab} />
+      case 'dashboard':     return <DashboardPage    key={activeTab} perfil={perfil} />
+      case 'pipeline':      return <PipelinePage     key={activeTab} perfil={perfil} />
+      case 'clientes':      return <ClientesPage     key={activeTab} perfil={perfil} />
+      case 'agenda':        return <AgendaPage        key={activeTab} perfil={perfil} />
+      case 'arena':         return <ArenaPage         key={activeTab} perfil={perfil} />
+      case 'relatorio':     return <RelatorioPage     key={activeTab} perfil={perfil} />
+      case 'avisos':        return <AvisosPage        key={activeTab} perfil={perfil} />
+      case 'bonus':         return <BonusPage         key={activeTab} perfil={perfil} />
+      case 'pos-venda':     return <PosVendaPage      key={activeTab} perfil={perfil} />
+      case 'aprovacoes':    return <AprovacoesPage    key={activeTab} perfil={perfil} />
+      case 'inadimplencia': return <InadimplenciaPage key={activeTab} perfil={perfil} />
+      case 'caixa':         return <CaixaPage         key={activeTab} perfil={perfil} />
+      case 'despesas':      return <DespesasPage      key={activeTab} perfil={perfil} />
+      case 'mrr':           return <MRRPage           key={activeTab} perfil={perfil} />
+      case 'equipes':       return <EquipesPage       key={activeTab} perfil={perfil} />
+      case 'produtos':      return <ProdutosPage      key={activeTab} perfil={perfil} />
+      case 'okrs':          return <OKRsPage          key={activeTab} perfil={perfil} />
+      case 'playbook':      return <PlaybookPage      key={activeTab} perfil={perfil} />
+      case 'intel-hub':     return <IntelPage         key={activeTab} perfil={perfil} abaInicial="hub" />
+      case 'intel-mov':     return <IntelPage         key={activeTab} perfil={perfil} abaInicial="mov" />
+      case 'ia-preditiva':  return <IAPreditivaPage   key={activeTab} perfil={perfil} />
+      case 'exportacao':    return <ExportacaoPage    key={activeTab} perfil={perfil} />
+      case 'perfil':        return <PerfilPage        key={activeTab} perfil={perfil} />
+      default:              return <PlaceholderPage   key={activeTab} tab={activeTab} />
     }
-  }
+  }, [activeTab, perfil])
 
   return (
     <div style={{ position:'relative', display:'flex', flexDirection:'column', minHeight:'100vh', zIndex:1 }}>
@@ -77,13 +76,13 @@ function AppShell({ perfil, onSignOut }) {
       <div style={{ display:'flex', flex:1, overflow:'hidden', height:'calc(100vh - 60px)' }}>
         <Sidebar activeTab={activeTab} onTabChange={setActiveTab} perfil={perfil} />
         <main style={{ flex:1, overflowY:'auto', padding:'26px 30px', position:'relative' }}>
-          <AnimatePresence mode="wait">
-            <motion.div key={activeTab}
-              initial={{ opacity:0, y:6 }} animate={{ opacity:1, y:0 }}
-              exit={{ opacity:0, y:-4 }} transition={{ duration:0.18, ease:[0.22,1,0.36,1] }}>
-              {renderPage()}
-            </motion.div>
-          </AnimatePresence>
+          <motion.div
+            key={activeTab}
+            initial={{ opacity:0, y:6 }}
+            animate={{ opacity:1, y:0 }}
+            transition={{ duration:0.18, ease:[0.22,1,0.36,1] }}>
+            {renderPage()}
+          </motion.div>
         </main>
       </div>
       <ChatIA perfil={perfil} />

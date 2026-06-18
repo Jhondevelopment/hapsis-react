@@ -37,15 +37,12 @@ export function useLeads(perfil) {
     if (!perfil?.id) return
     carregar()
 
-    // Canal único por usuário — evita conflitos
     const canalNome = `leads-${perfil.id}`
     if (canalRef.current) supabase.removeChannel(canalRef.current)
 
     canalRef.current = supabase
       .channel(canalNome)
-      .on('postgres_changes', {
-        event: '*', schema: 'public', table: 'leads'
-      }, () => carregar())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'leads' }, () => carregar())
       .subscribe()
 
     return () => {
@@ -66,7 +63,8 @@ export function useLeads(perfil) {
 
   async function atualizarLead(id, dados) {
     const clean     = sanitizar(dados)
-    const leadAtual = leads.find(l => l.id === id)
+    // Converter id para número para garantir match
+    const leadAtual = leads.find(l => String(l.id) === String(id))
     if (clean.status === 'Fechados' && leadAtual?.status !== 'Fechados') {
       clean.aprovado = false
       const hist = [...(leadAtual?.historico || [])]
@@ -83,26 +81,49 @@ export function useLeads(perfil) {
   }
 
   async function moverLead(id, novoStatus) {
-    const lead    = leads.find(l => l.id === id)
-    if (!lead) return
+    // Garantir que id é comparado como string (dataTransfer retorna string)
+    const lead = leads.find(l => String(l.id) === String(id))
+    if (!lead) {
+      console.warn('moverLead: lead não encontrado', id, leads.map(l=>l.id))
+      return
+    }
+
+    // Bloquear move de Fechados aprovados — imóveis
+    if (lead.status === 'Fechados' && lead.aprovado === true && !lead.estornado) {
+      console.warn('moverLead: lead aprovado é imóvel')
+      return
+    }
+
     const payload = sanitizar({ status: novoStatus })
+
     if (novoStatus === 'Fechados' && lead.status !== 'Fechados') {
       payload.aprovado = false
       const hist = [...(lead.historico || [])]
       hist.push({ data: new Date().toISOString(), msg: `🎉 Movido para Fechados — aguardando aprovação` })
       payload.historico = hist
     }
+
     if (lead.status === 'Fechados' && novoStatus !== 'Fechados') {
       payload.aprovado  = null
       payload.estornado = false
     }
+
+    console.log('moverLead:', id, lead.status, '→', novoStatus)
     const { error } = await supabase.from('leads').update(payload).eq('id', id)
-    if (error) throw error
+    if (error) {
+      console.error('moverLead erro:', error)
+      throw error
+    }
+
+    // Atualizar estado local imediatamente (otimista) para UI não reverter
+    setLeads(prev => prev.map(l =>
+      String(l.id) === String(id) ? { ...l, ...payload } : l
+    ))
   }
 
   const porStatus = (status) => leads.filter(l => l.status === status)
-  const fechados   = leads.filter(l => l.status === 'Fechados' && l.aprovado === true && !l.estornado)
-  const receita    = fechados.reduce((s, l) => s + (parseFloat(l.valor) || 0), 0)
+  const fechados  = leads.filter(l => l.status === 'Fechados' && l.aprovado === true && !l.estornado)
+  const receita   = fechados.reduce((s, l) => s + (parseFloat(l.valor) || 0), 0)
 
   return { leads, loading, carregar, criarLead, atualizarLead, deletarLead, moverLead, porStatus, fechados, receita }
 }

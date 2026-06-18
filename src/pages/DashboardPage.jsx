@@ -15,7 +15,7 @@ const C = {
 }
 
 // ── Gráfico de Área — estilo Apexify ──────────────────────────
-function AreaChart({ dados=[], color=C.gold, height=180, periodo='mensal' }) {
+function AreaChart({ dados=[], color=C.gold, height=180, periodo='mensal', receitaHoje=0 }) {
   const ref   = useRef(null)
   const [w, setW] = useState(680)
 
@@ -125,6 +125,16 @@ function AreaChart({ dados=[], color=C.gold, height=180, periodo='mensal' }) {
                       ? `R$ ${(p.d.val/1000).toFixed(0)}k`
                       : p.d.val.toLocaleString('pt-BR')}
                   </text>
+                  {isLast && periodo==='mensal' && receitaHoje > 0 && (
+                    <g>
+                      <rect x={p.x - 36} y={p.y + 10} width={72} height={17} rx="4"
+                        fill="rgba(240,180,41,0.18)" stroke="rgba(240,180,41,0.5)" strokeWidth="0.8" />
+                      <text x={p.x} y={p.y + 22} textAnchor="middle"
+                        fontSize="9" fill="#f0b429" fontFamily="Plus Jakarta Sans,sans-serif" fontWeight="700">
+                        {`Hoje R$ ${receitaHoje > 999 ? (receitaHoje/1000).toFixed(0)+'k' : receitaHoje}`}
+                      </text>
+                    </g>
+                  )}
                 </g>
               )}
             </g>
@@ -170,8 +180,8 @@ function StatCard({ label, value, sub, color=C.gold, icon, trend, delay=0, compa
       transition={{ delay, type:'spring', stiffness:300, damping:26 }}
       style={{ position:'relative', overflow:'hidden', borderRadius:14,
         padding: compact ? '16px 18px' : '20px 22px',
-        background:`linear-gradient(140deg, ${color}12 0%, rgba(10,11,18,0.95) 55%)`,
-        border:`1px solid ${color}22`,
+        background:`linear-gradient(180deg, ${color}3a 0%, ${color}12 40%, rgba(8,9,16,0.98) 80%)`,
+        border:`1px solid ${color}45`,
         backdropFilter:'blur(24px)' }}>
       {/* Linha colorida topo */}
       <div style={{ position:'absolute', top:0, left:0, right:0, height:2,
@@ -179,7 +189,7 @@ function StatCard({ label, value, sub, color=C.gold, icon, trend, delay=0, compa
         opacity:0.55 }} />
       {/* Orb sutil */}
       <div style={{ position:'absolute', top:-40, right:-40, width:100, height:100,
-        borderRadius:'50%', background:color, filter:'blur(50px)', opacity:0.07, pointerEvents:'none' }} />
+        borderRadius:'50%', background:color, filter:'blur(60px)', opacity:0.18, pointerEvents:'none' }} />
 
       <div style={{ position:'relative', zIndex:1 }}>
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom: compact ? 10 : 14 }}>
@@ -214,12 +224,12 @@ function StatCard({ label, value, sub, color=C.gold, icon, trend, delay=0, compa
 function Card({ title, accent=C.gold, delay=0, children, style={}, right }) {
   return (
     <motion.div initial={{ opacity:0, y:8 }} animate={{ opacity:1, y:0 }} transition={{ delay }}
-      style={{ borderRadius:14, background:`linear-gradient(145deg, ${accent}0d 0%, rgba(10,11,18,0.94) 50%)`,
-        border:`1px solid ${accent}1a`,
+      style={{ borderRadius:14, background:`linear-gradient(180deg, ${accent}35 0%, ${accent}10 45%, rgba(8,9,16,0.97) 80%)`,
+        border:`1px solid ${accent}40`,
         backdropFilter:'blur(24px)', position:'relative', overflow:'hidden', ...style }}>
       <div style={{ position:'absolute', top:0, left:0, right:0, height:2,
         background:`linear-gradient(90deg,transparent 0%,${accent} 50%,transparent 100%)`,
-        opacity:0.38 }} />
+        opacity:0.55 }} />
       {(title || right) && (
         <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between',
           padding:'18px 20px 0' }}>
@@ -353,17 +363,20 @@ function processarDados(fechados, periodo) {
   const map  = {}
 
   if (periodo === 'mensal') {
-    // Últimos 30 dias — por dia (agrupado em semanas)
+    // Últimos 30 dias — agrupado por semana com datas reais
     for (let i=4; i>=0; i--) {
-      const d = new Date(now); d.setDate(d.getDate() - i*7)
-      const k = `sem-${i}`
-      map[k] = { label: `S${5-i}`, val:0 }
+      const d = new Date(now)
+      d.setDate(d.getDate() - i*7)
+      const k = `sem-${4-i}`
+      const dia = d.getDate().toString().padStart(2,'0')
+      const mes = (d.getMonth()+1).toString().padStart(2,'0')
+      map[k] = { label: `${dia}/${mes}`, val:0, isHoje: i===0 }
     }
     fechados.forEach(l => {
       const d    = new Date(l.created_at||Date.now())
       const diff = Math.floor((now - d) / (7*24*60*60*1000))
       if (diff < 5) {
-        const k = `sem-${4-diff}`
+        const k = `sem-${diff}`
         if (map[k]) map[k].val += parseFloat(l.valor)||0
       }
     })
@@ -400,13 +413,38 @@ function processarDados(fechados, periodo) {
 // DASHBOARD GESTOR
 // ══════════════════════════════════════════════════════════════
 function DashboardGestor({ perfil }) {
-  const [leads,   setLeads]   = useState([])
-  const [equipe,  setEquipe]  = useState([])
-  const [loading, setLoading] = useState(true)
-  const [tab,     setTab]     = useState('overview')
-  const [periodo, setPeriodo] = useState('semestral')
+  const [leads,     setLeads]     = useState([])
+  const [equipe,    setEquipe]    = useState([])
+  const [loading,   setLoading]   = useState(true)
+  const [tab,       setTab]       = useState('overview')
+  const [periodo,   setPeriodo]   = useState('semestral')
+  const [metaEdit,  setMetaEdit]  = useState(null) // 'receita'|'fechados'|'conversao'|'leads'|null
+  const [metaInput, setMetaInput] = useState('')
+  const [salvando,  setSalvando]  = useState(false)
+  const [metas, setMetas] = useState({
+    receita:  null, // null = usa perfil.meta_mensal
+    fechados: 30,
+    conversao:30,
+    leads:    200,
+  })
 
   useEffect(() => { carregar() }, [])
+
+  async function salvarMeta(campo) {
+    const raw = metaInput.replace(/[^\d,.]/g,'').replace(',','.')
+    const val = parseFloat(raw)
+    if (!val || val <= 0) return
+    setSalvando(true)
+    try {
+      if (campo === 'receita') {
+        await supabase.from('profiles').update({ meta_mensal: val }).eq('id', perfil.id)
+        perfil.meta_mensal = val
+      }
+      setMetas(m => ({ ...m, [campo]: val }))
+    } catch(e) { console.error(e) }
+    setSalvando(false)
+    setMetaEdit(null)
+  }
 
   async function carregar() {
     try {
@@ -429,9 +467,15 @@ function DashboardGestor({ perfil }) {
   const valorPerdas= perdidos.reduce((s,l)=>s+(parseFloat(l.valor)||0),0)
   const taxaConv   = total>0 ? Math.round((fechados.length/total)*100) : 0
   const ticket     = fechados.length>0 ? Math.round(receita/fechados.length) : 0
-  const meta       = perfil?.meta_mensal ? parseFloat(perfil.meta_mensal) : 50000
+  const metaReceita = perfil?.meta_mensal ? parseFloat(perfil.meta_mensal) : 50000
   const forecast   = leads.filter(l=>l.status==='Negociacao').reduce((s,l)=>s+(parseFloat(l.valor)||0),0)*0.5
                    + leads.filter(l=>l.status==='Novos').reduce((s,l)=>s+(parseFloat(l.valor)||0),0)*0.1
+
+  const hoje = new Date()
+  const todayStr = `${hoje.getFullYear()}-${String(hoje.getMonth()+1).padStart(2,'0')}-${String(hoje.getDate()).padStart(2,'0')}`
+  const receitaHoje = fechados
+    .filter(l => l.created_at && l.created_at.startsWith(todayStr))
+    .reduce((s,l) => s+(parseFloat(l.valor)||0), 0)
 
   const dadosGrafico = processarDados(fechados, periodo)
   const receitaMes   = dadosGrafico[dadosGrafico.length-1]?.val || 0
@@ -515,14 +559,75 @@ function DashboardGestor({ perfil }) {
                       active={periodo} onChange={setPeriodo} />
                   </div>
                 }>
-                <AreaChart dados={dadosGrafico} color={C.gold} height={170} periodo={periodo} />
+                <AreaChart dados={dadosGrafico} color={C.gold} height={170} periodo={periodo} receitaHoje={receitaHoje} />
               </Card>
 
-              <Card title="Meta da Equipe" accent={C.green} delay={0.34}>
-                <ProgressBar label="Receita"   atual={receitaMes}      meta={meta} />
-                <ProgressBar label="Fechados"  atual={fechados.length} meta={30} />
-                <ProgressBar label="Conversão" atual={taxaConv}        meta={30} cor={C.purple} />
-                <ProgressBar label="Leads"     atual={total}           meta={200} cor={C.blue} />
+              <Card accent={C.green} delay={0.34} title="Meta da Equipe">
+                {[
+                  { campo:'receita',   label:'Receita',   atual:receitaMes,      meta:metas.receita||metaReceita, cor:C.green },
+                  { campo:'fechados',  label:'Fechados',  atual:fechados.length, meta:metas.fechados,             cor:C.gold  },
+                  { campo:'conversao', label:'Conversão', atual:taxaConv,        meta:metas.conversao,            cor:C.purple},
+                  { campo:'leads',     label:'Leads',     atual:total,           meta:metas.leads,                cor:C.blue  },
+                ].map(({ campo, label, atual, meta, cor }) => {
+                  const pct = meta>0 ? Math.min((atual/meta)*100,100) : 0
+                  const barCor = pct>=100?C.green:pct>=60?cor:C.red
+                  const editando = metaEdit===campo
+                  return (
+                    <div key={campo} style={{ marginBottom:16 }}>
+                      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:5 }}>
+                        <span style={{ fontSize:12, color:C.text2, fontFamily:'Plus Jakarta Sans,sans-serif' }}>{label}</span>
+                        <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+                          {editando ? (
+                            <>
+                              <input value={metaInput} onChange={e=>setMetaInput(e.target.value)}
+                                onKeyDown={e=>e.key==='Enter'&&salvarMeta(campo)}
+                                autoFocus placeholder={String(meta)}
+                                style={{ width:80, padding:'2px 7px', borderRadius:6, fontSize:11.5,
+                                  border:`1px solid ${cor}55`, background:`${cor}10`,
+                                  color:C.text, fontFamily:'Plus Jakarta Sans,sans-serif', outline:'none' }} />
+                              <button onClick={()=>salvarMeta(campo)} disabled={salvando}
+                                style={{ padding:'2px 8px', borderRadius:6, border:'none', cursor:'pointer',
+                                  background:cor, color:'#060609', fontWeight:700, fontSize:11,
+                                  fontFamily:'Plus Jakarta Sans,sans-serif' }}>
+                                {salvando?'...':'✓'}
+                              </button>
+                              <button onClick={()=>setMetaEdit(null)}
+                                style={{ padding:'2px 6px', borderRadius:6, border:`1px solid ${C.border}`,
+                                  background:'transparent', color:C.muted, cursor:'pointer', fontSize:11 }}>✕</button>
+                            </>
+                          ) : (
+                            <>
+                              <span style={{ fontSize:12, fontWeight:700, color:barCor, fontVariantNumeric:'tabular-nums' }}>{Math.round(pct)}%</span>
+                              <button onClick={()=>{ setMetaInput(String(meta)); setMetaEdit(campo) }}
+                                style={{ padding:'1px 7px', borderRadius:5, border:`1px solid ${cor}30`,
+                                  background:`${cor}0a`, color:cor, cursor:'pointer',
+                                  fontSize:10, fontWeight:700, fontFamily:'Plus Jakarta Sans,sans-serif' }}>
+                                ✎
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                      <div style={{ height:5, background:'rgba(0,0,0,0.35)', borderRadius:5, overflow:'hidden' }}>
+                        <motion.div initial={{ width:0 }} animate={{ width:`${pct}%` }}
+                          transition={{ duration:1.1, ease:[0.22,1,0.36,1], delay:0.4 }}
+                          style={{ height:'100%', background:`linear-gradient(90deg,${barCor},${barCor}bb)`, borderRadius:5 }} />
+                      </div>
+                      <div style={{ display:'flex', justifyContent:'space-between', marginTop:3 }}>
+                        <span style={{ fontSize:10, color:C.muted, fontVariantNumeric:'tabular-nums' }}>
+                          {typeof atual==='number'&&atual>999
+                            ? atual.toLocaleString('pt-BR',{style:'currency',currency:'BRL',maximumFractionDigits:0})
+                            : atual}
+                        </span>
+                        <span style={{ fontSize:10, color:C.muted, fontVariantNumeric:'tabular-nums' }}>
+                          meta: {typeof meta==='number'&&meta>999
+                            ? meta.toLocaleString('pt-BR',{style:'currency',currency:'BRL',maximumFractionDigits:0})
+                            : meta}
+                        </span>
+                      </div>
+                    </div>
+                  )
+                })}
               </Card>
 
               <Card title="Funil Geral" accent={C.blue} delay={0.38}>
@@ -711,7 +816,7 @@ function DashboardVendedor({ perfil }) {
   const receita   = fechados.reduce((s,l)=>s+(parseFloat(l.valor)||0),0)
   const taxaConv  = total>0 ? Math.round((fechados.length/total)*100) : 0
   const ticket    = fechados.length>0 ? Math.round(receita/fechados.length) : 0
-  const meta      = perfil?.meta_mensal ? parseFloat(perfil.meta_mensal) : 10000
+  const metaReceita = perfil?.meta_mensal ? parseFloat(perfil.meta_mensal) : 10000
   const valorPerd = perdidos.reduce((s,l)=>s+(parseFloat(l.valor)||0),0)
   const posRank   = ranking.findIndex(r=>r.id===perfil.id)+1
 
@@ -773,7 +878,7 @@ function DashboardVendedor({ perfil }) {
                 <AreaChart dados={dadosGrafico} color={C.gold} height={170} />
               </Card>
               <Card title="Minha Meta" accent={C.green} delay={0.34}>
-                <ProgressBar label="Receita"   atual={receita}         meta={meta} />
+                <ProgressBar label="Receita"   atual={receita}         meta={metaReceita} />
                 <ProgressBar label="Fechados"  atual={fechados.length} meta={10} />
                 <ProgressBar label="Conversão" atual={taxaConv}        meta={30} cor={C.purple} />
                 {pendentes.length>0 && (

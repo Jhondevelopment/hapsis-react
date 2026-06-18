@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { supabase } from '../lib/supabase'
 import { useLeads } from '../hooks/useLeads'
@@ -12,6 +12,50 @@ const COLUNAS = [
 ]
 const ORIGENS    = ['Indicação','Instagram','Google','Facebook','LinkedIn','WhatsApp','Site','Outro']
 const PAGAMENTOS = ['PIX','Cartão de Crédito','Cartão de Débito','Boleto','Transferência','Dinheiro']
+
+// ── Máscaras de input ────────────────────────────────────────
+function maskCPF(value) {
+  const digits = value.replace(/\D/g,'').slice(0,11)
+  let out = digits
+  if (digits.length > 9) out = `${digits.slice(0,3)}.${digits.slice(3,6)}.${digits.slice(6,9)}-${digits.slice(9,11)}`
+  else if (digits.length > 6) out = `${digits.slice(0,3)}.${digits.slice(3,6)}.${digits.slice(6,9)}`
+  else if (digits.length > 3) out = `${digits.slice(0,3)}.${digits.slice(3,6)}`
+  return out
+}
+
+function maskTelefone(value) {
+  const digits = value.replace(/\D/g,'').slice(0,11)
+  let out = digits
+  if (digits.length > 10) out = `(${digits.slice(0,2)}) ${digits.slice(2,7)}-${digits.slice(7,11)}`
+  else if (digits.length > 6) out = `(${digits.slice(0,2)}) ${digits.slice(2,6)}-${digits.slice(6,10)}`
+  else if (digits.length > 2) out = `(${digits.slice(0,2)}) ${digits.slice(2)}`
+  else if (digits.length > 0) out = `(${digits}`
+  return out
+}
+
+// Formata número conforme digita: 1234567 -> 12.345,67
+function maskValor(value) {
+  const digits = value.replace(/\D/g,'')
+  if (!digits) return ''
+  const num = parseInt(digits, 10) / 100
+  return num.toLocaleString('pt-BR', { minimumFractionDigits:2, maximumFractionDigits:2 })
+}
+
+// Converte string formatada "12.345,67" para número 12345.67 (para salvar no banco)
+function valorParaNumero(formatted) {
+  if (!formatted) return null
+  const clean = formatted.replace(/\./g,'').replace(',','.')
+  const num = parseFloat(clean)
+  return isNaN(num) ? null : num
+}
+
+// Converte número do banco (12345.67) para string formatada "12.345,67"
+function numeroParaValor(num) {
+  if (num === null || num === undefined || num === '') return ''
+  const n = parseFloat(num)
+  if (isNaN(n)) return ''
+  return n.toLocaleString('pt-BR', { minimumFractionDigits:2, maximumFractionDigits:2 })
+}
 
 const WPP_TEMPLATES = [
   { label:'Primeiro contato',  icon:'👋', fn:(n,p,v)=>`Olá ${n}! 😊 Sou da equipe de vendas e gostaria de conversar sobre ${p||'nossa solução'}. Podemos bater um papo rápido?` },
@@ -140,8 +184,8 @@ function DrawerLead({ lead, perfil, onFechar, onSalvar, onDeletar, onRecarregar,
   const setAba = setSalvando  // alias
   const [abaAtiva,setAbaAtiva] = useState('dados')
   const [form,setForm] = useState({
-    nome:lead?.nome||'', telefone:lead?.telefone||'', produto:lead?.produto||'',
-    valor:lead?.valor||'', status:lead?.status||'Novos', origem_lead:lead?.origem_lead||'',
+    nome:lead?.nome||'', telefone:lead?.telefone?maskTelefone(lead.telefone):'', cpf:lead?.cpf?maskCPF(lead.cpf):'', produto:lead?.produto||'',
+    valor:lead?.valor?numeroParaValor(lead.valor):'', status:lead?.status||'Novos', origem_lead:lead?.origem_lead||'',
     forma_pagamento:lead?.forma_pagamento||'', data_followup:lead?.data_followup||'',
     observacoes:lead?.observacoes||'', motivo_perda:lead?.motivo_perda||'',
     is_recorrente:lead?.is_recorrente||false,
@@ -149,7 +193,17 @@ function DrawerLead({ lead, perfil, onFechar, onSalvar, onDeletar, onRecarregar,
   const [saving,setSaving] = useState(false)
   const [msg,setMsg] = useState(null)
   const [confirm,setConfirm] = useState(null)
+  const [produtos,setProdutos] = useState([])
   const fileCompRef=useRef(); const fileContRef=useRef()
+
+  // Carregar produtos cadastrados pelo gestor
+  useEffect(()=>{
+    supabase.from('produtos').select('id,nome,valor,taxa_comissao').order('nome')
+      .then(({data,error})=>{
+        if(error) { console.error('Erro ao carregar produtos:', error); return }
+        setProdutos(data||[])
+      })
+  },[])
 
   function set(c,v){setForm(f=>({...f,[c]:v}))}
   function showMsg(type,text){setMsg({type,text});setTimeout(()=>setMsg(null),3000)}
@@ -157,8 +211,10 @@ function DrawerLead({ lead, perfil, onFechar, onSalvar, onDeletar, onRecarregar,
   function sanitizar(f){
     const c={...f}
     if(!c.data_followup)c.data_followup=null
-    if(!c.valor||c.valor==='')c.valor=null
-    ;['motivo_perda','origem_lead','forma_pagamento','telefone','produto','observacoes']
+    c.valor = c.valor ? valorParaNumero(c.valor) : null
+    c.cpf   = c.cpf ? c.cpf.replace(/\D/g,'') : null
+    c.telefone = c.telefone ? c.telefone.replace(/\D/g,'') : null
+    ;['motivo_perda','origem_lead','forma_pagamento','produto','observacoes']
       .forEach(k=>{if(c[k]==='')c[k]=null})
     return c
   }
@@ -319,20 +375,129 @@ function DrawerLead({ lead, perfil, onFechar, onSalvar, onDeletar, onRecarregar,
               {/* ABA DADOS */}
               {abaAtiva==='dados'&&(
                 <div>
-                  {[
-                    {label:'Nome completo *',campo:'nome',type:'text',placeholder:'Ex: João Silva'},
-                    {label:'Telefone / WhatsApp',campo:'telefone',type:'tel',placeholder:'(00) 00000-0000'},
-                    {label:'Produto / Serviço',campo:'produto',type:'text',placeholder:'Ex: Plano Premium'},
-                    {label:'Valor (R$)',campo:'valor',type:'number',placeholder:'0,00'},
-                  ].map(f=>(
-                    <div key={f.campo} style={{marginBottom:14}}>
-                      <label style={{display:'block',fontSize:11,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.6px',color:'#4c5070',marginBottom:7}}>{f.label}</label>
-                      <input type={f.type} value={form[f.campo]||''} onChange={e=>set(f.campo,e.target.value)} placeholder={f.placeholder}
+                  {/* Nome */}
+                  <div style={{marginBottom:14}}>
+                    <label style={{display:'block',fontSize:11,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.6px',color:'#4c5070',marginBottom:7}}>Nome completo *</label>
+                    <input type="text" value={form.nome||''} onChange={e=>set('nome',e.target.value)} placeholder="Ex: João Silva"
+                      style={{width:'100%',background:'rgba(255,255,255,0.035)',border:'1px solid rgba(255,255,255,0.08)',borderRadius:10,padding:'11px 15px',fontSize:14,color:'#f0f1ff',outline:'none',fontFamily:'inherit',transition:'border-color 0.2s'}}
+                      onFocus={e=>e.target.style.borderColor='rgba(240,180,41,0.45)'}
+                      onBlur={e=>e.target.style.borderColor='rgba(255,255,255,0.08)'} />
+                  </div>
+
+                  {/* Telefone + CPF lado a lado */}
+                  <div style={{display:'grid',gridTemplateColumns:'1.2fr 1fr',gap:12,marginBottom:14}}>
+                    <div>
+                      <label style={{display:'block',fontSize:11,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.6px',color:'#4c5070',marginBottom:7}}>Telefone / WhatsApp</label>
+                      <input type="tel" inputMode="numeric" value={form.telefone||''} onChange={e=>set('telefone',maskTelefone(e.target.value))} placeholder="(00) 00000-0000" maxLength={15}
                         style={{width:'100%',background:'rgba(255,255,255,0.035)',border:'1px solid rgba(255,255,255,0.08)',borderRadius:10,padding:'11px 15px',fontSize:14,color:'#f0f1ff',outline:'none',fontFamily:'inherit',transition:'border-color 0.2s'}}
                         onFocus={e=>e.target.style.borderColor='rgba(240,180,41,0.45)'}
                         onBlur={e=>e.target.style.borderColor='rgba(255,255,255,0.08)'} />
                     </div>
-                  ))}
+                    <div>
+                      <label style={{display:'block',fontSize:11,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.6px',color:'#4c5070',marginBottom:7}}>CPF</label>
+                      <input type="text" inputMode="numeric" value={form.cpf||''} onChange={e=>set('cpf',maskCPF(e.target.value))} placeholder="000.000.000-00" maxLength={14}
+                        style={{width:'100%',background:'rgba(255,255,255,0.035)',border:'1px solid rgba(255,255,255,0.08)',borderRadius:10,padding:'11px 15px',fontSize:14,color:'#f0f1ff',outline:'none',fontFamily:'inherit',transition:'border-color 0.2s',fontVariantNumeric:'tabular-nums'}}
+                        onFocus={e=>e.target.style.borderColor='rgba(240,180,41,0.45)'}
+                        onBlur={e=>e.target.style.borderColor='rgba(255,255,255,0.08)'} />
+                    </div>
+                  </div>
+
+                  {/* Produto — Select inteligente */}
+                  <div style={{marginBottom:14}}>
+                    <label style={{display:'block',fontSize:11,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.6px',color:'#4c5070',marginBottom:7}}>
+                      Produto / Serviço
+                    </label>
+                    {produtos.length > 0 && (
+                      // Produtos disponíveis — select normal
+                      <>
+                        <select
+                          value={form.produto||''}
+                          onChange={e=>{
+                            const nome = e.target.value
+                            set('produto', nome)
+                            const prod = produtos.find(p=>p.nome===nome)
+                            if(prod?.valor) set('valor', numeroParaValor(prod.valor))
+                          }}
+                          style={{width:'100%',background:'rgba(255,255,255,0.035)',border:'1px solid rgba(255,255,255,0.08)',borderRadius:10,padding:'11px 15px',fontSize:14,color:form.produto?'#f0f1ff':'#4c5070',outline:'none',fontFamily:'inherit',cursor:'pointer',transition:'border-color 0.2s'}}
+                          onFocus={e=>e.target.style.borderColor='rgba(240,180,41,0.45)'}
+                          onBlur={e=>e.target.style.borderColor='rgba(255,255,255,0.08)'}>
+                          <option value="">— Selecionar produto —</option>
+                          {produtos.map(p=>(
+                            <option key={p.id} value={p.nome}>
+                              {p.nome}{p.valor ? ` — R$ ${parseFloat(p.valor).toLocaleString('pt-BR')}` : ''}{p.taxa_comissao ? ` (${p.taxa_comissao}% comissão)` : ''}
+                            </option>
+                          ))}
+                        </select>
+
+                        {/* Info do produto selecionado + painel de controle de desconto */}
+                        {form.produto && (() => {
+                          const prod = produtos.find(p=>p.nome===form.produto)
+                          if (!prod) return null
+                          const precoOriginal = parseFloat(prod.valor)||0
+                          const valorAtual    = valorParaNumero(form.valor)||0
+                          const temDesconto   = precoOriginal > 0 && valorAtual > 0 && valorAtual < precoOriginal
+                          const pctDesconto   = temDesconto ? Math.round(((precoOriginal-valorAtual)/precoOriginal)*100) : 0
+                          const acimaTabela   = precoOriginal > 0 && valorAtual > precoOriginal
+                          return (
+                            <div style={{marginTop:8,display:'flex',flexDirection:'column',gap:6}}>
+                              <div style={{padding:'9px 12px',borderRadius:9,background:'rgba(240,180,41,0.06)',border:'1px solid rgba(240,180,41,0.16)',display:'flex',gap:14,flexWrap:'wrap',alignItems:'center'}}>
+                                {prod.valor && <span style={{fontSize:11.5,color:'#00c896',fontWeight:700}}>💰 Tabela: R$ {parseFloat(prod.valor).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2})}</span>}
+                                {prod.taxa_comissao && <span style={{fontSize:11.5,color:'#f0b429',fontWeight:700}}>💸 {prod.taxa_comissao}% comissão</span>}
+                              </div>
+
+                              {/* Painel de controle de desconto — visível para gestor */}
+                              {isGestor && temDesconto && (
+                                <div style={{padding:'11px 13px',borderRadius:10,background:'rgba(255,140,66,0.08)',border:'1px solid rgba(255,140,66,0.30)'}}>
+                                  <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}>
+                                    <span style={{fontSize:15}}>⚠️</span>
+                                    <p style={{fontSize:12,fontWeight:700,color:'#ff8c42',margin:0}}>Desconto aplicado pelo vendedor</p>
+                                    <span style={{marginLeft:'auto',fontFamily:'Syne,sans-serif',fontSize:15,fontWeight:800,color:'#ff8c42'}}>{pctDesconto}%</span>
+                                  </div>
+                                  <div style={{height:6,borderRadius:6,background:'rgba(0,0,0,0.35)',overflow:'hidden',marginBottom:8}}>
+                                    <motion.div initial={{width:0}} animate={{width:`${Math.min(pctDesconto,100)}%`}}
+                                      transition={{duration:0.5,ease:[0.22,1,0.36,1]}}
+                                      style={{height:'100%',background:pctDesconto>30?'linear-gradient(90deg,#ff4d6a,#ff8c42)':'linear-gradient(90deg,#ff8c42,#f0b429)',borderRadius:6}} />
+                                  </div>
+                                  <p style={{fontSize:11,color:'#8f94b0',margin:0}}>
+                                    R$ {precoOriginal.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2})} → R$ {valorAtual.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2})}
+                                  </p>
+                                  {pctDesconto>30&&(
+                                    <p style={{fontSize:10.5,color:'#ff4d6a',margin:'5px 0 0',fontWeight:600}}>⚡ Desconto acima de 30% — recomenda-se análise antes de aprovar.</p>
+                                  )}
+                                </div>
+                              )}
+
+                              {/* Valor acima da tabela — informativo */}
+                              {acimaTabela && (
+                                <div style={{padding:'7px 11px',borderRadius:8,background:'rgba(0,200,150,0.07)',border:'1px solid rgba(0,200,150,0.18)'}}>
+                                  <p style={{fontSize:11,color:'#00c896',margin:0}}>📈 Valor acima do preço de tabela (upsell)</p>
+                                </div>
+                              )}
+
+                              {/* Confirmação para vendedor de que valor foi reduzido */}
+                              {!isGestor && temDesconto && (
+                                <div style={{padding:'7px 11px',borderRadius:8,background:'rgba(77,159,255,0.08)',border:'1px solid rgba(77,159,255,0.20)'}}>
+                                  <p style={{fontSize:11,color:'#4d9fff',margin:0}}>ℹ️ Desconto de {pctDesconto}% — sujeito a aprovação do gestor</p>
+                                </div>
+                              )}
+                            </div>
+                          )
+                        })()}
+                      </>
+                    )}
+                  </div>
+
+                  {/* Valor — máscara monetária em tempo real */}
+                  <div style={{marginBottom:14}}>
+                    <label style={{display:'block',fontSize:11,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.6px',color:'#4c5070',marginBottom:7}}>Valor</label>
+                    <div style={{position:'relative'}}>
+                      <span style={{position:'absolute',left:15,top:'50%',transform:'translateY(-50%)',color:'#00c896',fontWeight:700,fontSize:14,pointerEvents:'none'}}>R$</span>
+                      <input type="text" inputMode="numeric" value={form.valor||''} onChange={e=>set('valor',maskValor(e.target.value))} placeholder="0,00"
+                        style={{width:'100%',background:'rgba(0,200,150,0.04)',border:'1px solid rgba(0,200,150,0.16)',borderRadius:10,padding:'11px 15px 11px 40px',fontSize:15,fontWeight:700,color:'#00c896',outline:'none',fontFamily:'inherit',transition:'border-color 0.2s',fontVariantNumeric:'tabular-nums'}}
+                        onFocus={e=>e.target.style.borderColor='rgba(0,200,150,0.45)'}
+                        onBlur={e=>e.target.style.borderColor='rgba(0,200,150,0.16)'} />
+                    </div>
+                  </div>
 
                   <div style={{marginBottom:14}}>
                     <label style={{display:'block',fontSize:11,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.6px',color:'#4c5070',marginBottom:7}}>Data de Follow-up</label>
@@ -353,7 +518,7 @@ function DrawerLead({ lead, perfil, onFechar, onSalvar, onDeletar, onRecarregar,
                     ) : (
                       <select value={form.status} onChange={e=>set('status',e.target.value)}
                         style={{width:'100%',background:'#0d1117',border:'1px solid rgba(255,255,255,0.10)',borderRadius:10,padding:'11px 15px',fontSize:14,color:'#f0f1ff',outline:'none'}}>
-                        {COLUNAS.filter(col=>col.id!=='Fechados'&&col.id!=='Perdidos').map(c=><option key={c.id} value={c.id}>{c.label}</option>)}
+                        {COLUNAS.filter(col=>col.id!=='Perdidos').map(c=><option key={c.id} value={c.id}>{c.label}</option>)}
                       </select>
                     )}
                   </div>
@@ -498,6 +663,24 @@ function DrawerLead({ lead, perfil, onFechar, onSalvar, onDeletar, onRecarregar,
                         style={{padding:'9px 18px',background:'rgba(255,140,66,0.12)',border:'1px solid rgba(255,140,66,0.26)',borderRadius:8,color:'#ff8c42',fontWeight:700,fontSize:12,cursor:'pointer'}}>↩️ Confirmar Estorno</motion.button>
                     </div>
                   )}
+                  {/* Inadimplência — gestor pode marcar em qualquer momento */}
+                  {lead && isFechado && !lead.is_inadimplente && (
+                    <div style={{padding:16,borderRadius:12,background:'rgba(255,77,106,0.04)',border:'1px solid rgba(255,77,106,0.18)'}}>
+                      <h4 style={{fontFamily:'Syne,sans-serif',fontWeight:700,fontSize:14,color:'#ff4d6a',marginBottom:12}}>⚠️ Inadimplência</h4>
+                      <div style={{display:'flex',gap:8}}>
+                        <motion.button onClick={()=>setConfirm({tipo:'atraso'})} whileHover={{y:-1}} whileTap={{scale:0.98}}
+                          style={{padding:'9px 18px',background:'rgba(255,140,66,0.12)',border:'1px solid rgba(255,140,66,0.26)',borderRadius:8,color:'#ff8c42',fontWeight:700,fontSize:12,cursor:'pointer'}}>🕐 Sinalizar Atraso</motion.button>
+                        <motion.button onClick={()=>setConfirm({tipo:'inadimplente'})} whileHover={{y:-1}} whileTap={{scale:0.98}}
+                          style={{padding:'9px 18px',background:'rgba(255,77,106,0.12)',border:'1px solid rgba(255,77,106,0.26)',borderRadius:8,color:'#ff4d6a',fontWeight:700,fontSize:12,cursor:'pointer'}}>⚠️ Marcar Inadimplente</motion.button>
+                      </div>
+                    </div>
+                  )}
+                  {lead && lead.is_inadimplente && (
+                    <div style={{padding:12,borderRadius:10,background:'rgba(255,77,106,0.08)',border:'1px solid rgba(255,77,106,0.22)',display:'flex',alignItems:'center',gap:8}}>
+                      <span style={{fontSize:16}}>⚠️</span>
+                      <span style={{fontSize:13,color:'#ff4d6a',fontWeight:600}}>Cliente marcado como inadimplente</span>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -546,105 +729,127 @@ function DrawerLead({ lead, perfil, onFechar, onSalvar, onDeletar, onRecarregar,
   )
 }
 
-// ── Lead card ─────────────────────────────────────────────────
-function LeadCard({ lead, onAbrir, onAbrirWpp, perfil }) {
-  const cor = {Fechados:'#00c896',Perdidos:'#ff4d6a',Novos:'#4d9fff',Negociacao:'#ff8c42',Contato:'#f0b429'}[lead.status]||'#4c5070'
+// ── Lead card — design premium com avatar e hierarquia visual ──
+function LeadCard({ lead, onAbrir, onAbrirWpp, perfil, corColuna }) {
+  const cor = {Fechados:'#00c896',Perdidos:'#ff4d6a',Novos:'#4d9fff',Negociacao:'#ff8c42',Contato:'#f0b429'}[lead.status]||corColuna||'#4c5070'
 
-  // Aprovado = card imóvel (gestor aprovou)
   const aprovado  = lead.status==='Fechados' && lead.aprovado===true  && !lead.estornado
-  // Pendente = card cinzento (aguarda aprovação)
   const pendente  = lead.status==='Fechados' && (lead.aprovado===false||lead.aprovado===null) && !lead.estornado
-  // REGRA: Fechados e Perdidos são SEMPRE bloqueados — ninguém move
   const bloqueado = lead.status==='Fechados' || lead.status==='Perdidos'
 
+  const inicial = (lead.nome||'?').trim().charAt(0).toUpperCase()
+
   return(
-    <motion.div layout
-      initial={{opacity:0,y:10,scale:0.97}}
-      animate={{
-        opacity: pendente ? 0.55 : 1,
-        y:0, scale:1,
-        filter: pendente ? 'grayscale(60%) brightness(0.75)' : 'none',
-      }}
-      exit={{opacity:0,scale:0.95}}
-      whileHover={!bloqueado ? {y:-3,boxShadow:`0 8px 24px rgba(0,0,0,0.35)`,opacity:1,filter:'none'} : {}}
-      transition={{layout:{type:'spring',stiffness:300,damping:30},opacity:{duration:0.3}}}
+    <motion.div
+      whileHover={!bloqueado ? { y:-3 } : {}}
+      transition={{ type:'spring', stiffness:400, damping:28 }}
       draggable={!bloqueado}
       onDragStart={e=>{
         if(bloqueado){e.preventDefault();return}
-        e.dataTransfer.setData('leadId',lead.id)
+        e.dataTransfer.setData('leadId',String(lead.id))
         e.dataTransfer.effectAllowed='move'
       }}
-      style={{position:'relative',borderRadius:12,padding:13,
+      style={{position:'relative',borderRadius:13,padding:'13px 14px 13px 16px',
         cursor: aprovado ? 'default' : bloqueado ? 'not-allowed' : 'grab',
+        opacity: pendente ? 0.55 : 1,
+        filter: pendente ? 'grayscale(55%) brightness(0.78)' : 'none',
         background: pendente
-          ? 'rgba(14,15,22,0.85)'
-          : 'rgba(20,21,32,0.70)',
-        backdropFilter:'blur(16px)',
+          ? 'rgba(13,14,20,0.88)'
+          : 'linear-gradient(155deg,rgba(255,255,255,0.045) 0%,rgba(18,19,28,0.85) 60%)',
+        backdropFilter:'blur(18px)',
         border: aprovado
-          ? '1px solid rgba(0,200,150,0.22)'
+          ? '1px solid rgba(0,200,150,0.24)'
           : pendente
-          ? '1px solid rgba(255,255,255,0.03)'
-          : '1px solid rgba(255,255,255,0.06)',
-        marginBottom:8,
-        transition:'border-color 0.2s,box-shadow 0.2s',
-        userSelect:'none'}}>
+          ? '1px solid rgba(255,255,255,0.04)'
+          : '1px solid rgba(255,255,255,0.07)',
+        boxShadow: aprovado ? '0 2px 12px rgba(0,200,150,0.08)' : '0 2px 8px rgba(0,0,0,0.18)',
+        marginBottom:9,
+        transition:'border-color 0.2s,box-shadow 0.25s,opacity 0.2s',
+        userSelect:'none',overflow:'hidden'}}>
 
-      {/* Barra lateral colorida */}
+      {/* Barra lateral de status — gradiente vertical */}
       <div style={{position:'absolute',left:0,top:0,bottom:0,width:3,
-        background: pendente ? '#555' : cor,
-        borderRadius:'12px 0 0 12px',
-        opacity: pendente ? 0.4 : 0.85}} />
+        background: pendente ? '#4a4d5e' : `linear-gradient(180deg,${cor},${cor}77)`,
+        opacity: pendente ? 0.5 : 1}} />
 
       {/* Badge de cadeado se aprovado */}
       {aprovado && (
-        <div style={{position:'absolute',top:8,right:8,fontSize:12,opacity:0.6}} title="Venda aprovada — imóvel">🔒</div>
+        <div style={{position:'absolute',top:10,right:10,fontSize:11,opacity:0.55}} title="Venda aprovada — imóvel">🔒</div>
       )}
 
-      <div onClick={()=>onAbrir(lead)} style={{cursor:'pointer',paddingRight:aprovado?20:0}}>
-        <div style={{display:'flex',justifyContent:'space-between',marginBottom:8,gap:6}}>
-          <span style={{fontWeight:700,fontSize:13.5,color: pendente?'#6a7080':'#f0f1ff'}}>{lead.nome}</span>
-          <div style={{display:'flex',gap:3,alignItems:'center',flexShrink:0}}>
-            {lead.comprovante_url&&<span style={{fontSize:11}} title="Comprovante">💳</span>}
-            {lead.is_inadimplente&&<span style={{fontSize:11}} title="Inadimplente">⚠️</span>}
-            {lead.estornado&&<span style={{fontSize:11}} title="Estornado">↩️</span>}
-            {pendente&&(
-              <motion.span animate={{opacity:[1,0.4,1]}} transition={{duration:1.5,repeat:Infinity}}
-                style={{fontSize:9,fontWeight:700,background:'rgba(255,140,66,0.16)',color:'#ff8c42',padding:'1px 5px',borderRadius:4,border:'1px solid rgba(255,140,66,0.28)'}}>
-                PEND
-              </motion.span>
-            )}
+      <div onClick={()=>onAbrir(lead)} style={{cursor:'pointer'}}>
+        <div style={{display:'flex',alignItems:'flex-start',gap:10,marginBottom:10}}>
+          {/* Avatar com inicial */}
+          <div style={{width:30,height:30,borderRadius:9,flexShrink:0,
+            background: pendente ? 'rgba(255,255,255,0.04)' : `${cor}1c`,
+            border: `1px solid ${pendente ? 'rgba(255,255,255,0.06)' : cor+'38'}`,
+            display:'flex',alignItems:'center',justifyContent:'center',
+            fontFamily:'Syne,sans-serif',fontWeight:700,fontSize:13,
+            color: pendente ? '#454860' : cor}}>
+            {inicial}
+          </div>
+
+          <div style={{flex:1,minWidth:0,paddingRight:aprovado?16:0}}>
+            <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:2}}>
+              <span style={{fontWeight:700,fontSize:13.5,color: pendente?'#6a7080':'#f8f9ff',
+                overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{lead.nome}</span>
+            </div>
+            <div style={{display:'flex',gap:4,alignItems:'center',flexWrap:'wrap'}}>
+              {lead.comprovante_url&&<span style={{fontSize:10}} title="Comprovante">💳</span>}
+              {lead.is_inadimplente&&<span style={{fontSize:10}} title="Inadimplente">⚠️</span>}
+              {lead.estornado&&<span style={{fontSize:10}} title="Estornado">↩️</span>}
+              {pendente&&(
+                <motion.span animate={{opacity:[1,0.4,1]}} transition={{duration:1.5,repeat:Infinity}}
+                  style={{fontSize:8.5,fontWeight:800,letterSpacing:'0.4px',background:'rgba(255,140,66,0.16)',color:'#ff8c42',padding:'1.5px 6px',borderRadius:4,border:'1px solid rgba(255,140,66,0.28)'}}>
+                  PENDENTE
+                </motion.span>
+              )}
+            </div>
           </div>
         </div>
-        <div style={{display:'flex',flexDirection:'column',gap:3,fontSize:11.5,color: pendente?'#454860':'#4c5070'}}>
-          {lead.produto&&<span>📦 {lead.produto}</span>}
-          {parseFloat(lead.valor)>0&&<span style={{color: pendente?'#3a6b56':'#00c896',fontWeight:700}}>💰 R$ {parseFloat(lead.valor).toLocaleString('pt-BR')}</span>}
-          {lead.data_followup&&<span style={{color: pendente?'#4a4460':'#9d6fff'}}>📅 {new Date(lead.data_followup+'T12:00:00').toLocaleDateString('pt-BR')}</span>}
+
+        <div style={{display:'flex',flexDirection:'column',gap:5,fontSize:11.5,
+          color: pendente?'#454860':'#8f94b0',marginLeft:40}}>
+          {lead.produto&&(
+            <span style={{display:'flex',alignItems:'center',gap:5,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+              <span style={{opacity:0.6,fontSize:10}}>◆</span>{lead.produto}
+            </span>
+          )}
+          {parseFloat(lead.valor)>0&&(
+            <span style={{display:'flex',alignItems:'center',gap:5,color: pendente?'#3a6b56':'#00c896',fontWeight:800,fontSize:13,fontVariantNumeric:'tabular-nums',fontFamily:'Syne,sans-serif'}}>
+              R$ {parseFloat(lead.valor).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2})}
+            </span>
+          )}
+          {lead.data_followup&&(
+            <span style={{display:'flex',alignItems:'center',gap:5,color: pendente?'#4a4460':'#9d6fff',fontSize:10.5}}>
+              <span style={{opacity:0.7,fontSize:9}}>●</span>{new Date(lead.data_followup+'T12:00:00').toLocaleDateString('pt-BR')}
+            </span>
+          )}
         </div>
       </div>
 
-      {/* Ícone WhatsApp — sem número, só ícone verde */}
+      {/* Botão WhatsApp flutuante */}
       {lead.telefone&&(
         <motion.button
           onClick={e=>{e.stopPropagation();onAbrirWpp(lead)}}
-          whileHover={{scale:1.08,background:'rgba(37,211,102,0.22)'}}
-          whileTap={{scale:0.92}}
+          whileHover={{scale:1.1,background:'rgba(37,211,102,0.24)'}}
+          whileTap={{scale:0.9}}
           title={`WhatsApp: ${lead.telefone}`}
-          style={{position:'absolute',bottom:10,right:10,
-            width:30,height:30,borderRadius:'50%',
-            background:'rgba(37,211,102,0.10)',
-            border:'1px solid rgba(37,211,102,0.25)',
+          style={{position:'absolute',bottom:11,right:11,
+            width:27,height:27,borderRadius:'50%',
+            background:'rgba(37,211,102,0.12)',
+            border:'1px solid rgba(37,211,102,0.26)',
             display:'flex',alignItems:'center',justifyContent:'center',
-            cursor:'pointer',transition:'all 0.15s',fontSize:15}}>
+            cursor:'pointer',transition:'all 0.15s',fontSize:13}}>
           📱
         </motion.button>
       )}
-      {/* Espaço para não sobrepor conteúdo quando tem whatsapp */}
-      {lead.telefone&&<div style={{height:8}} />}
+      {lead.telefone&&<div style={{height:6}} />}
     </motion.div>
   )
 }
 
-// ── Kanban coluna ─────────────────────────────────────────────
+// ── Kanban coluna — identidade visual premium ──────────────────
 function KanbanCol({coluna,leads,onAbrir,onMover,onAbrirWpp,perfil}){
   const [dragOver,setDragOver]=useState(false)
   const handleDragOver=useCallback(e=>{e.preventDefault();e.dataTransfer.dropEffect='move';setDragOver(true)},[])
@@ -654,32 +859,50 @@ function KanbanCol({coluna,leads,onAbrir,onMover,onAbrirWpp,perfil}){
     const id=e.dataTransfer.getData('leadId');if(id)onMover(id,coluna.id)
   },[coluna.id,onMover])
 
+  const valorTotal = leads.reduce((s,l)=>s+(parseFloat(l.valor)||0),0)
+
   return(
     <motion.div onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop}
-      animate={{ borderColor:dragOver?`${coluna.cor}66`:'#1e2030', boxShadow:dragOver?`0 0 0 2px ${coluna.cor}33`:'none' }}
-      transition={{duration:0.15}}
-      style={{borderRadius:14,overflow:'hidden',display:'flex',flexDirection:'column',maxHeight:'calc(100vh - 200px)',
-        background:'linear-gradient(180deg,rgba(16,17,26,0.95),rgba(10,11,18,0.92))',backdropFilter:'blur(24px)',
-        border:'1px solid #1e2030'}}>
-      <div style={{display:'flex',alignItems:'center',gap:9,padding:'12px 14px',borderBottom:'1px solid rgba(255,255,255,0.04)',
-        background:dragOver?`${coluna.cor}08`:'rgba(0,0,0,0.18)',transition:'background 0.15s'}}>
-        <motion.div animate={{boxShadow:dragOver?`0 0 12px ${coluna.cor}`:`0 0 6px ${coluna.cor}66`}}
-          style={{width:8,height:8,borderRadius:'50%',background:coluna.cor}} />
-        <span style={{fontFamily:'Syne,sans-serif',fontSize:12,fontWeight:700,flex:1,color:'#f0f1ff'}}>{coluna.label}</span>
-        <span style={{background:'rgba(0,0,0,0.38)',border:'1px solid rgba(255,255,255,0.06)',borderRadius:18,padding:'2px 8px',fontSize:10,fontWeight:700,color:'#8f94b0'}}>{leads.length}</span>
+      animate={{
+        borderColor:dragOver?`${coluna.cor}77`:'rgba(255,255,255,0.06)',
+        boxShadow:dragOver?`0 0 0 1px ${coluna.cor}44, 0 12px 32px ${coluna.cor}1a`:'0 4px 16px rgba(0,0,0,0.25)',
+      }}
+      transition={{duration:0.18}}
+      style={{borderRadius:16,overflow:'hidden',display:'flex',flexDirection:'column',maxHeight:'calc(100vh - 230px)',
+        background:`linear-gradient(180deg,${coluna.cor}0d 0%,rgba(10,11,18,0.96) 38%)`,
+        backdropFilter:'blur(28px)',border:'1px solid rgba(255,255,255,0.06)',position:'relative'}}>
+
+      {/* Linha de destaque no topo */}
+      <div style={{position:'absolute',top:0,left:0,right:0,height:2,
+        background:`linear-gradient(90deg,transparent,${coluna.cor},transparent)`,opacity:0.7}} />
+
+      <div style={{display:'flex',alignItems:'center',gap:10,padding:'14px 16px',borderBottom:'1px solid rgba(255,255,255,0.05)',
+        background:dragOver?`${coluna.cor}10`:'rgba(0,0,0,0.15)',transition:'background 0.15s'}}>
+        <motion.div animate={{boxShadow:dragOver?`0 0 14px ${coluna.cor}`:`0 0 7px ${coluna.cor}77`}}
+          style={{width:9,height:9,borderRadius:'50%',background:coluna.cor,flexShrink:0}} />
+        <div style={{flex:1,minWidth:0}}>
+          <span style={{fontFamily:'Syne,sans-serif',fontSize:13,fontWeight:700,color:'#f0f1ff',display:'block'}}>{coluna.label}</span>
+          {valorTotal > 0 && (
+            <span style={{fontSize:10.5,color:coluna.cor,fontWeight:700,fontVariantNumeric:'tabular-nums'}}>
+              R$ {valorTotal.toLocaleString('pt-BR',{minimumFractionDigits:0,maximumFractionDigits:0})}
+            </span>
+          )}
+        </div>
+        <span style={{background:`${coluna.cor}14`,border:`1px solid ${coluna.cor}33`,borderRadius:99,padding:'3px 9px',fontSize:11,fontWeight:800,color:coluna.cor,flexShrink:0}}>{leads.length}</span>
       </div>
-      <div style={{padding:8,flex:1,overflowY:'auto',minHeight:100,background:dragOver?`${coluna.cor}03`:'transparent',transition:'background 0.15s'}}>
+
+      <div style={{padding:9,flex:1,overflowY:'auto',minHeight:100,background:dragOver?`${coluna.cor}05`:'transparent',transition:'background 0.15s'}}>
         <AnimatePresence>
-          {leads.map(l=><LeadCard key={l.id} lead={l} onAbrir={onAbrir} onAbrirWpp={onAbrirWpp} perfil={perfil} />)}
+          {leads.map(l=><LeadCard key={l.id} lead={l} onAbrir={onAbrir} onAbrirWpp={onAbrirWpp} perfil={perfil} corColuna={coluna.cor} />)}
         </AnimatePresence>
-        <motion.div animate={{opacity:dragOver?1:0,y:dragOver?0:4}} style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:'16px 12px',color:coluna.cor,textAlign:'center',pointerEvents:'none'}}>
-          <span style={{fontSize:20,marginBottom:4}}>⬇️</span>
-          <p style={{fontSize:11,fontWeight:600}}>Soltar aqui</p>
+        <motion.div animate={{opacity:dragOver?1:0,scale:dragOver?1:0.92}} style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:'20px 12px',color:coluna.cor,textAlign:'center',pointerEvents:'none'}}>
+          <span style={{fontSize:22,marginBottom:5}}>⬇</span>
+          <p style={{fontSize:11.5,fontWeight:700}}>Soltar aqui</p>
         </motion.div>
         {leads.length===0&&!dragOver&&(
-          <div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:'24px 12px',color:'#323448',textAlign:'center'}}>
-            <span style={{fontSize:20,marginBottom:6,opacity:0.3}}>📋</span>
-            <p style={{fontSize:11}}>Sem leads</p>
+          <div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:'28px 12px',color:'#323448',textAlign:'center'}}>
+            <span style={{fontSize:22,marginBottom:7,opacity:0.25}}>○</span>
+            <p style={{fontSize:11.5}}>Sem leads</p>
           </div>
         )}
       </div>
@@ -783,49 +1006,73 @@ export function PipelinePage({ perfil }) {
 
   return(
     <div>
-      {/* Header */}
-      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:20,gap:12,flexWrap:'wrap'}}>
-        <div>
-          <h1 style={{fontFamily:'Syne,sans-serif',fontSize:22,fontWeight:700,color:'#f0f1ff'}}>Pipeline</h1>
-          <p style={{fontSize:13,color:'#4c5070',marginTop:3}}>
-            {leads.length} leads
-            {leads.filter(l=>l.status==='Fechados'&&(l.aprovado===false||l.aprovado===null)&&!l.estornado).length>0&&(
-              <motion.span animate={{opacity:[1,0.6,1]}} transition={{duration:2,repeat:Infinity}}
-                style={{color:'#ff8c42',fontWeight:600}}> · {leads.filter(l=>l.status==='Fechados'&&(l.aprovado===false||l.aprovado===null)&&!l.estornado).length} aguardando aprovação</motion.span>
-            )}
-          </p>
-        </div>
-        <div style={{display:'flex',gap:10,alignItems:'center',flexWrap:'wrap'}}>
-          <BuscaGlobal leads={leads} onAbrir={setDrawerLead} />
+      {/* Header — premium com glow ambiente */}
+      <div style={{position:'relative',marginBottom:24,padding:'22px 26px',borderRadius:20,overflow:'hidden',
+        background:'linear-gradient(135deg,rgba(240,180,41,0.07) 0%,rgba(10,11,18,0.96) 55%)',
+        border:'1px solid rgba(240,180,41,0.16)'}}>
+        {/* Orb decorativo animado */}
+        <motion.div animate={{x:[0,30,0],y:[0,-15,0]}} transition={{duration:12,repeat:Infinity,ease:'easeInOut'}}
+          style={{position:'absolute',top:-60,right:-40,width:220,height:220,borderRadius:'50%',
+          background:'radial-gradient(circle,rgba(240,180,41,0.18),transparent 70%)',filter:'blur(20px)',pointerEvents:'none'}} />
+        <motion.div animate={{x:[0,-20,0],y:[0,20,0]}} transition={{duration:14,repeat:Infinity,ease:'easeInOut'}}
+          style={{position:'absolute',bottom:-50,left:'30%',width:180,height:180,borderRadius:'50%',
+          background:'radial-gradient(circle,rgba(157,111,255,0.10),transparent 70%)',filter:'blur(24px)',pointerEvents:'none'}} />
 
-          {/* Filtro rápido por status */}
-          <select value={filtroStatus} onChange={e=>setFiltroStatus(e.target.value)}
-            style={{padding:'8px 12px',background:'rgba(255,255,255,0.05)',border:'1px solid rgba(255,255,255,0.08)',borderRadius:10,color:filtroStatus?'#f0f1ff':'#4c5070',fontSize:12.5,outline:'none',cursor:'pointer'}}>
-            <option value="">Todos</option>
-            {COLUNAS.map(c=><option key={c.id} value={c.id}>{c.label}</option>)}
-          </select>
-
-          <div style={{display:'flex',background:'rgba(255,255,255,0.05)',border:'1px solid rgba(255,255,255,0.08)',borderRadius:10,overflow:'hidden'}}>
-            {[['kanban','⬛'],['lista','☰']].map(([v,l])=>(
-              <motion.button key={v} onClick={()=>setViewMode(v)} whileTap={{scale:0.95}}
-                style={{padding:'8px 14px',border:'none',background:viewMode===v?'rgba(240,180,41,0.14)':'transparent',color:viewMode===v?'#f0b429':'#4c5070',cursor:'pointer',fontSize:14,fontWeight:600,transition:'all 0.15s'}}>{l}</motion.button>
-            ))}
+        <div style={{position:'relative',zIndex:1,display:'flex',alignItems:'center',justifyContent:'space-between',gap:16,flexWrap:'wrap'}}>
+          <div>
+            <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:6}}>
+              <div style={{width:6,height:24,borderRadius:4,background:'linear-gradient(180deg,#f0b429,#c9960e)',boxShadow:'0 0 16px rgba(240,180,41,0.5)'}} />
+              <h1 style={{fontFamily:'Syne,sans-serif',fontSize:26,fontWeight:800,color:'#fff',letterSpacing:'-0.3px',margin:0}}>Pipeline</h1>
+            </div>
+            <p style={{fontSize:13,color:'#8f94b0',marginLeft:16,letterSpacing:'0.2px'}}>
+              <span style={{color:'#f0f1ff',fontWeight:700}}>{leads.length}</span> leads no funil
+              {leads.filter(l=>l.status==='Fechados'&&(l.aprovado===false||l.aprovado===null)&&!l.estornado).length>0&&(
+                <motion.span animate={{opacity:[1,0.5,1]}} transition={{duration:2,repeat:Infinity}}
+                  style={{color:'#ff8c42',fontWeight:700,marginLeft:6}}>
+                  · {leads.filter(l=>l.status==='Fechados'&&(l.aprovado===false||l.aprovado===null)&&!l.estornado).length} aguardando aprovação
+                </motion.span>
+              )}
+            </p>
           </div>
 
-          <motion.button onClick={()=>setNovoDrawer(true)} whileHover={{y:-1,filter:'brightness(1.05)'}} whileTap={{scale:0.97}}
-            style={{display:'flex',alignItems:'center',gap:7,padding:'9px 16px',background:'linear-gradient(180deg,rgba(240,180,41,0.18),rgba(240,180,41,0.09))',border:'1px solid rgba(240,180,41,0.28)',borderRadius:10,color:'#f0b429',fontWeight:700,fontSize:13,cursor:'pointer'}}>
-            + Novo Lead
-          </motion.button>
+          <div style={{display:'flex',gap:10,alignItems:'center',flexWrap:'wrap'}}>
+            <BuscaGlobal leads={leads} onAbrir={setDrawerLead} />
+
+            <select value={filtroStatus} onChange={e=>setFiltroStatus(e.target.value)}
+              style={{padding:'9px 14px',background:'rgba(255,255,255,0.04)',border:'1px solid rgba(255,255,255,0.09)',borderRadius:11,color:filtroStatus?'#f0f1ff':'#4c5070',fontSize:12.5,outline:'none',cursor:'pointer',fontWeight:600}}>
+              <option value="">Todos os status</option>
+              {COLUNAS.map(c=><option key={c.id} value={c.id}>{c.label}</option>)}
+            </select>
+
+            <div style={{display:'flex',background:'rgba(255,255,255,0.04)',border:'1px solid rgba(255,255,255,0.09)',borderRadius:11,overflow:'hidden',padding:2}}>
+              {[['kanban','⬛'],['lista','☰']].map(([v,l])=>(
+                <motion.button key={v} onClick={()=>setViewMode(v)} whileTap={{scale:0.95}}
+                  style={{padding:'7px 14px',border:'none',borderRadius:9,background:viewMode===v?'linear-gradient(180deg,rgba(240,180,41,0.22),rgba(240,180,41,0.10))':'transparent',color:viewMode===v?'#f0b429':'#4c5070',cursor:'pointer',fontSize:14,fontWeight:600,transition:'all 0.15s'}}>{l}</motion.button>
+              ))}
+            </div>
+
+            <motion.button onClick={()=>setNovoDrawer(true)} whileHover={{y:-2,boxShadow:'0 8px 24px rgba(240,180,41,0.35)'}} whileTap={{scale:0.97}}
+              style={{display:'flex',alignItems:'center',gap:8,padding:'10px 20px',
+                background:'linear-gradient(160deg,#f0b429,#c9960e)',
+                border:'1px solid rgba(255,255,255,0.30)',borderRadius:11,
+                color:'#0a0a0e',fontWeight:800,fontSize:13.5,cursor:'pointer',
+                fontFamily:'Syne,sans-serif',boxShadow:'0 4px 16px rgba(240,180,41,0.20)',
+                transition:'box-shadow 0.25s'}}>
+              <span style={{fontSize:16}}>+</span> Novo Lead
+            </motion.button>
+          </div>
         </div>
       </div>
 
       {/* Kanban */}
       {viewMode==='kanban'&&(
-        <motion.div layout style={{display:'grid',gridTemplateColumns:'repeat(5,minmax(200px,1fr))',gap:10,overflowX:'auto',paddingBottom:8}}>
-          {COLUNAS.map(col=>(
-            <KanbanCol key={col.id} coluna={col}
-              leads={porStatus(col.id).filter(l=>!filtroStatus||l.status===filtroStatus||!filtroStatus)}
-              onAbrir={setDrawerLead} onMover={moverLead} onAbrirWpp={setWppLead} perfil={perfil} />
+        <motion.div layout style={{display:'grid',gridTemplateColumns:'repeat(5,minmax(210px,1fr))',gap:12,overflowX:'auto',paddingBottom:10}}>
+          {COLUNAS.map((col,i)=>(
+            <motion.div key={col.id} initial={{opacity:0,y:10}} animate={{opacity:1,y:0}} transition={{delay:i*0.05,duration:0.3}}>
+              <KanbanCol coluna={col}
+                leads={porStatus(col.id).filter(l=>!filtroStatus||l.status===filtroStatus||!filtroStatus)}
+                onAbrir={setDrawerLead} onMover={moverLead} onAbrirWpp={setWppLead} perfil={perfil} />
+            </motion.div>
           ))}
         </motion.div>
       )}
@@ -850,7 +1097,7 @@ export function PipelinePage({ perfil }) {
                     onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
                     <td onClick={()=>setDrawerLead(lead)} style={{padding:'12px 14px',color:'#f0f1ff',fontWeight:600}}>{lead.nome}</td>
                     <td onClick={()=>setDrawerLead(lead)} style={{padding:'12px 14px',color:'#8f94b0',fontSize:13}}>{lead.produto||'—'}</td>
-                    <td onClick={()=>setDrawerLead(lead)} style={{padding:'12px 14px',color:'#00c896',fontWeight:700,fontSize:13}}>{parseFloat(lead.valor)>0?`R$ ${parseFloat(lead.valor).toLocaleString('pt-BR')}`:'—'}</td>
+                    <td onClick={()=>setDrawerLead(lead)} style={{padding:'12px 14px',color:'#00c896',fontWeight:700,fontSize:13,fontVariantNumeric:'tabular-nums'}}>{parseFloat(lead.valor)>0?`R$ ${parseFloat(lead.valor).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2})}`:'—'}</td>
                     <td onClick={()=>setDrawerLead(lead)} style={{padding:'12px 14px'}}>
                       <span style={{fontSize:11,fontWeight:700,padding:'2px 8px',borderRadius:99,background:`${cor}18`,color:cor}}>{lead.status}</span>
                     </td>
