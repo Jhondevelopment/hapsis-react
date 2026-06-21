@@ -57,6 +57,175 @@ function numeroParaValor(num) {
   return n.toLocaleString('pt-BR', { minimumFractionDigits:2, maximumFractionDigits:2 })
 }
 
+
+
+// ── Dropdown customizado (substitui <select> nativo feio) ──────
+function SelectCustom({ value, onChange, options, placeholder='Selecionar...', renderOption, accentColor='#f0b429' }) {
+  const [aberto, setAberto] = useState(false)
+  const ref = useRef(null)
+
+  useEffect(() => {
+    function fechar(e) { if (ref.current && !ref.current.contains(e.target)) setAberto(false) }
+    document.addEventListener('mousedown', fechar)
+    return () => document.removeEventListener('mousedown', fechar)
+  }, [])
+
+  const selecionado = options.find(o => o.value === value)
+
+  return (
+    <div ref={ref} style={{ position:'relative', width:'100%' }}>
+      <button type="button" onClick={() => setAberto(a => !a)}
+        style={{ width:'100%', display:'flex', alignItems:'center', justifyContent:'space-between',
+          background:'rgba(255,255,255,0.035)', border:`1px solid ${aberto?accentColor+'73':'rgba(255,255,255,0.08)'}`,
+          borderRadius:10, padding:'11px 15px', fontSize:14, color: selecionado?'#f0f1ff':'#4c5070',
+          cursor:'pointer', fontFamily:'inherit', textAlign:'left', transition:'border-color 0.2s' }}>
+        <span style={{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+          {selecionado ? (renderOption ? renderOption(selecionado) : selecionado.label) : placeholder}
+        </span>
+        <motion.span animate={{ rotate: aberto ? 180 : 0 }} transition={{ duration:0.15 }}
+          style={{ color:'#4c5070', fontSize:11, marginLeft:8, flexShrink:0 }}>▼</motion.span>
+      </button>
+
+      <AnimatePresence>
+        {aberto && (
+          <motion.div initial={{ opacity:0, y:-6, scale:0.98 }} animate={{ opacity:1, y:0, scale:1 }} exit={{ opacity:0, y:-6, scale:0.98 }}
+            transition={{ duration:0.15 }}
+            style={{ position:'absolute', top:'calc(100% + 6px)', left:0, right:0, zIndex:300,
+              background:'rgba(10,11,18,0.99)', backdropFilter:'blur(32px)',
+              border:'1px solid rgba(255,255,255,0.10)', borderRadius:12,
+              boxShadow:'0 16px 48px rgba(0,0,0,0.72)', overflow:'hidden', maxHeight:280, overflowY:'auto' }}>
+            {options.map((opt,i) => (
+              <div key={opt.value || i} onClick={() => { onChange(opt.value); setAberto(false) }}
+                style={{ padding:'11px 15px', fontSize:13.5, cursor:'pointer',
+                  color: opt.value===value ? accentColor : '#d0d3f0',
+                  background: opt.value===value ? `${accentColor}14` : 'transparent',
+                  borderBottom: i<options.length-1 ? '1px solid rgba(255,255,255,0.04)' : 'none',
+                  transition:'background 0.1s' }}
+                onMouseEnter={e=>{ if(opt.value!==value) e.currentTarget.style.background='rgba(255,255,255,0.04)' }}
+                onMouseLeave={e=>{ if(opt.value!==value) e.currentTarget.style.background='transparent' }}>
+                {renderOption ? renderOption(opt) : opt.label}
+              </div>
+            ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  )
+}
+
+// ── Date picker customizado (substitui <input type="date"> ilegível) ──
+function DatePickerCustom({ value, onChange, accentColor='#f0b429' }) {
+  const [aberto, setAberto] = useState(false)
+  const [mesAtual, setMesAtual] = useState(() => value ? new Date(value+'T12:00:00') : new Date())
+  const ref = useRef(null)
+
+  useEffect(() => {
+    function fechar(e) { if (ref.current && !ref.current.contains(e.target)) setAberto(false) }
+    document.addEventListener('mousedown', fechar)
+    return () => document.removeEventListener('mousedown', fechar)
+  }, [])
+
+  const meses = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro']
+  const diasSemana = ['D','S','T','Q','Q','S','S']
+
+  const ano = mesAtual.getFullYear()
+  const mes = mesAtual.getMonth()
+  const primeiroDia = new Date(ano, mes, 1).getDay()
+  const diasNoMes = new Date(ano, mes+1, 0).getDate()
+  const hoje = new Date(); hoje.setHours(0,0,0,0)
+
+  const dataSelecionada = value ? new Date(value+'T12:00:00') : null
+
+  function selecionarDia(dia) {
+    const d = new Date(ano, mes, dia)
+    const iso = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
+    onChange(iso)
+    setAberto(false)
+  }
+
+  function mudarMes(delta) {
+    setMesAtual(new Date(ano, mes+delta, 1))
+  }
+
+  const celulas = []
+  for (let i=0; i<primeiroDia; i++) celulas.push(null)
+  for (let d=1; d<=diasNoMes; d++) celulas.push(d)
+
+  return (
+    <div ref={ref} style={{ position:'relative', width:'100%' }}>
+      <button type="button" onClick={() => setAberto(a => !a)}
+        style={{ width:'100%', display:'flex', alignItems:'center', justifyContent:'space-between',
+          background:'rgba(255,255,255,0.035)', border:`1px solid ${aberto?accentColor+'73':'rgba(255,255,255,0.08)'}`,
+          borderRadius:10, padding:'11px 15px', fontSize:14, color: value?'#f0f1ff':'#4c5070',
+          cursor:'pointer', fontFamily:'inherit', textAlign:'left', transition:'border-color 0.2s' }}>
+        <span>{value ? new Date(value+'T12:00:00').toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric'}) : 'Selecionar data'}</span>
+        <span style={{ color:accentColor, fontSize:14 }}>📅</span>
+      </button>
+
+      <AnimatePresence>
+        {aberto && (
+          <motion.div initial={{ opacity:0, y:-6, scale:0.98 }} animate={{ opacity:1, y:0, scale:1 }} exit={{ opacity:0, y:-6, scale:0.98 }}
+            transition={{ duration:0.15 }}
+            style={{ position:'absolute', top:'calc(100% + 6px)', left:0, zIndex:300, width:280,
+              background:'rgba(10,11,18,0.99)', backdropFilter:'blur(32px)',
+              border:'1px solid rgba(255,255,255,0.10)', borderRadius:14,
+              boxShadow:'0 16px 48px rgba(0,0,0,0.72)', padding:16 }}>
+
+            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:14 }}>
+              <button type="button" onClick={()=>mudarMes(-1)}
+                style={{ width:28, height:28, borderRadius:8, background:'rgba(255,255,255,0.05)', border:'1px solid rgba(255,255,255,0.08)', color:'#8f94b0', cursor:'pointer', fontSize:13 }}>‹</button>
+              <span style={{ fontSize:13.5, fontWeight:700, color:'#f0f1ff' }}>{meses[mes]} {ano}</span>
+              <button type="button" onClick={()=>mudarMes(1)}
+                style={{ width:28, height:28, borderRadius:8, background:'rgba(255,255,255,0.05)', border:'1px solid rgba(255,255,255,0.08)', color:'#8f94b0', cursor:'pointer', fontSize:13 }}>›</button>
+            </div>
+
+            <div style={{ display:'grid', gridTemplateColumns:'repeat(7,1fr)', gap:2, marginBottom:6 }}>
+              {diasSemana.map((d,i) => (
+                <div key={i} style={{ textAlign:'center', fontSize:10.5, fontWeight:700, color:'#4c5070', padding:'4px 0' }}>{d}</div>
+              ))}
+            </div>
+
+            <div style={{ display:'grid', gridTemplateColumns:'repeat(7,1fr)', gap:2 }}>
+              {celulas.map((dia,i) => {
+                if (!dia) return <div key={i} />
+                const d = new Date(ano, mes, dia); d.setHours(0,0,0,0)
+                const isHoje = d.getTime()===hoje.getTime()
+                const isSelecionado = dataSelecionada && d.getTime()===new Date(dataSelecionada.getFullYear(),dataSelecionada.getMonth(),dataSelecionada.getDate()).getTime()
+                return (
+                  <button key={i} type="button" onClick={()=>selecionarDia(dia)}
+                    style={{ aspectRatio:'1', borderRadius:8, border:'none', cursor:'pointer', fontSize:12.5,
+                      fontWeight: isSelecionado ? 700 : 500,
+                      background: isSelecionado ? accentColor : isHoje ? `${accentColor}1c` : 'transparent',
+                      color: isSelecionado ? '#0a0a0e' : isHoje ? accentColor : '#d0d3f0',
+                      transition:'background 0.1s' }}
+                    onMouseEnter={e=>{ if(!isSelecionado) e.currentTarget.style.background='rgba(255,255,255,0.08)' }}
+                    onMouseLeave={e=>{ if(!isSelecionado) e.currentTarget.style.background = isHoje ? `${accentColor}1c` : 'transparent' }}>
+                    {dia}
+                  </button>
+                )
+              })}
+            </div>
+
+            <div style={{ display:'flex', gap:8, marginTop:14, paddingTop:12, borderTop:'1px solid rgba(255,255,255,0.06)' }}>
+              <button type="button" onClick={()=>{ onChange(''); setAberto(false) }}
+                style={{ flex:1, padding:'7px', borderRadius:8, background:'rgba(255,255,255,0.05)', border:'1px solid rgba(255,255,255,0.08)', color:'#8f94b0', fontSize:11.5, fontWeight:600, cursor:'pointer' }}>
+                Limpar
+              </button>
+              <button type="button" onClick={()=>{
+                const t = new Date()
+                const iso = `${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,'0')}-${String(t.getDate()).padStart(2,'0')}`
+                onChange(iso); setMesAtual(t); setAberto(false)
+              }}
+                style={{ flex:1, padding:'7px', borderRadius:8, background:`${accentColor}18`, border:`1px solid ${accentColor}38`, color:accentColor, fontSize:11.5, fontWeight:700, cursor:'pointer' }}>
+                Hoje
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  )
+}
 const WPP_TEMPLATES = [
   { label:'Primeiro contato',  icon:'👋', fn:(n,p,v)=>`Olá ${n}! 😊 Sou da equipe de vendas e gostaria de conversar sobre ${p||'nossa solução'}. Podemos bater um papo rápido?` },
   { label:'Enviar proposta',   icon:'📋', fn:(n,p,v)=>`Olá ${n}! 👋 Segue nossa proposta para ${p||'nosso serviço'}${v?` — R$ ${parseFloat(v).toLocaleString('pt-BR')}`:''}. Estou à disposição! 🤝` },
@@ -402,32 +571,27 @@ function DrawerLead({ lead, perfil, onFechar, onSalvar, onDeletar, onRecarregar,
                     </div>
                   </div>
 
-                  {/* Produto — Select inteligente */}
+                  {/* Produto — Select customizado */}
                   <div style={{marginBottom:14}}>
                     <label style={{display:'block',fontSize:11,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.6px',color:'#4c5070',marginBottom:7}}>
                       Produto / Serviço
                     </label>
                     {produtos.length > 0 && (
-                      // Produtos disponíveis — select normal
                       <>
-                        <select
+                        <SelectCustom
                           value={form.produto||''}
-                          onChange={e=>{
-                            const nome = e.target.value
+                          placeholder="— Selecionar produto —"
+                          accentColor="#f0b429"
+                          onChange={(nome)=>{
                             set('produto', nome)
                             const prod = produtos.find(p=>p.nome===nome)
                             if(prod?.valor) set('valor', numeroParaValor(prod.valor))
                           }}
-                          style={{width:'100%',background:'rgba(255,255,255,0.035)',border:'1px solid rgba(255,255,255,0.08)',borderRadius:10,padding:'11px 15px',fontSize:14,color:form.produto?'#f0f1ff':'#4c5070',outline:'none',fontFamily:'inherit',cursor:'pointer',transition:'border-color 0.2s'}}
-                          onFocus={e=>e.target.style.borderColor='rgba(240,180,41,0.45)'}
-                          onBlur={e=>e.target.style.borderColor='rgba(255,255,255,0.08)'}>
-                          <option value="">— Selecionar produto —</option>
-                          {produtos.map(p=>(
-                            <option key={p.id} value={p.nome}>
-                              {p.nome}{p.valor ? ` — R$ ${parseFloat(p.valor).toLocaleString('pt-BR')}` : ''}{p.taxa_comissao ? ` (${p.taxa_comissao}% comissão)` : ''}
-                            </option>
-                          ))}
-                        </select>
+                          options={produtos.map(p=>({
+                            value: p.nome,
+                            label: `${p.nome}${p.valor ? ` — R$ ${parseFloat(p.valor).toLocaleString('pt-BR')}` : ''}${p.taxa_comissao ? ` (${p.taxa_comissao}% comissão)` : ''}`
+                          }))}
+                        />
 
                         {/* Info do produto selecionado + painel de controle de desconto */}
                         {form.produto && (() => {
@@ -501,8 +665,7 @@ function DrawerLead({ lead, perfil, onFechar, onSalvar, onDeletar, onRecarregar,
 
                   <div style={{marginBottom:14}}>
                     <label style={{display:'block',fontSize:11,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.6px',color:'#4c5070',marginBottom:7}}>Data de Follow-up</label>
-                    <input type="date" value={form.data_followup||''} onChange={e=>set('data_followup',e.target.value||'')}
-                      style={{width:'100%',background:'rgba(255,255,255,0.035)',border:'1px solid rgba(255,255,255,0.08)',borderRadius:10,padding:'11px 15px',fontSize:14,color:'#f0f1ff',outline:'none'}} />
+                    <DatePickerCustom value={form.data_followup||''} onChange={(v)=>set('data_followup',v||'')} accentColor="#9d6fff" />
                   </div>
 
                   {/* Status — bloqueado para vendedor se fechado */}
@@ -516,10 +679,12 @@ function DrawerLead({ lead, perfil, onFechar, onSalvar, onDeletar, onRecarregar,
                         🔒 {isFechado?'Fechado':'Perdido'} — status não pode ser alterado
                       </div>
                     ) : (
-                      <select value={form.status} onChange={e=>set('status',e.target.value)}
-                        style={{width:'100%',background:'#0d1117',border:'1px solid rgba(255,255,255,0.10)',borderRadius:10,padding:'11px 15px',fontSize:14,color:'#f0f1ff',outline:'none'}}>
-                        {COLUNAS.filter(col=>col.id!=='Perdidos').map(c=><option key={c.id} value={c.id}>{c.label}</option>)}
-                      </select>
+                      <SelectCustom
+                        value={form.status}
+                        onChange={(v)=>set('status',v)}
+                        accentColor="#4d9fff"
+                        options={COLUNAS.filter(col=>col.id!=='Perdidos').map(c=>({value:c.id,label:c.label}))}
+                      />
                     )}
                   </div>
 
@@ -540,17 +705,23 @@ function DrawerLead({ lead, perfil, onFechar, onSalvar, onDeletar, onRecarregar,
                   <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:14}}>
                     <div>
                       <label style={{display:'block',fontSize:11,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.6px',color:'#4c5070',marginBottom:7}}>Origem</label>
-                      <select value={form.origem_lead||''} onChange={e=>set('origem_lead',e.target.value)}
-                        style={{width:'100%',background:'#0d1117',border:'1px solid rgba(255,255,255,0.10)',borderRadius:10,padding:'11px 15px',fontSize:14,color:'#f0f1ff',outline:'none'}}>
-                        <option value="">Selecionar</option>{ORIGENS.map(o=><option key={o}>{o}</option>)}
-                      </select>
+                      <SelectCustom
+                        value={form.origem_lead||''}
+                        onChange={(v)=>set('origem_lead',v)}
+                        placeholder="Selecionar"
+                        accentColor="#9d6fff"
+                        options={ORIGENS.map(o=>({value:o,label:o}))}
+                      />
                     </div>
                     <div>
                       <label style={{display:'block',fontSize:11,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.6px',color:'#4c5070',marginBottom:7}}>Pagamento</label>
-                      <select value={form.forma_pagamento||''} onChange={e=>set('forma_pagamento',e.target.value)}
-                        style={{width:'100%',background:'#0d1117',border:'1px solid rgba(255,255,255,0.10)',borderRadius:10,padding:'11px 15px',fontSize:14,color:'#f0f1ff',outline:'none'}}>
-                        <option value="">Selecionar</option>{PAGAMENTOS.map(p=><option key={p}>{p}</option>)}
-                      </select>
+                      <SelectCustom
+                        value={form.forma_pagamento||''}
+                        onChange={(v)=>set('forma_pagamento',v)}
+                        placeholder="Selecionar"
+                        accentColor="#00c896"
+                        options={PAGAMENTOS.map(p=>({value:p,label:p}))}
+                      />
                     </div>
                   </div>
 
@@ -943,7 +1114,7 @@ function BuscaGlobal({ leads, onAbrir }) {
         {focado && resultados.length > 0 && (
           <motion.div initial={{opacity:0,y:4}} animate={{opacity:1,y:0}} exit={{opacity:0,y:4}}
             transition={{duration:0.15}}
-            style={{position:'absolute',top:'calc(100% + 6px)',left:0,right:0,zIndex:200,
+            style={{position:'absolute',top:'calc(100% + 6px)',left:0,right:0,zIndex:1000,
               background:'rgba(8,8,14,0.98)',backdropFilter:'blur(32px)',
               border:'1px solid rgba(255,255,255,0.10)',borderRadius:12,
               boxShadow:'0 16px 48px rgba(0,0,0,0.72)',overflow:'hidden'}}>
@@ -966,7 +1137,7 @@ function BuscaGlobal({ leads, onAbrir }) {
         )}
         {focado && busca.length > 1 && resultados.length === 0 && (
           <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}}
-            style={{position:'absolute',top:'calc(100% + 6px)',left:0,right:0,zIndex:200,
+            style={{position:'absolute',top:'calc(100% + 6px)',left:0,right:0,zIndex:1000,
               background:'rgba(8,8,14,0.98)',backdropFilter:'blur(32px)',
               border:'1px solid rgba(255,255,255,0.10)',borderRadius:12,padding:'16px 14px',
               textAlign:'center',color:'#4c5070',fontSize:13,
@@ -980,13 +1151,23 @@ function BuscaGlobal({ leads, onAbrir }) {
 }
 
 // ══════════════════════════════════════════════════════════════
-export function PipelinePage({ perfil }) {
+export function PipelinePage({ perfil, leadParaAbrir, onLeadAberto }) {
   const {leads,loading,criarLead,atualizarLead,deletarLead,moverLead,porStatus,carregar}=useLeads(perfil)
   const [drawerLead,setDrawerLead]=useState(null)
   const [novoDrawer,setNovoDrawer]=useState(false)
   const [viewMode,setViewMode]=useState('kanban')
   const [filtroStatus,setFiltroStatus]=useState('')
   const [wppLead,setWppLead]=useState(null)
+
+  // Abrir automaticamente um lead específico quando vier da busca do Topbar
+  useEffect(() => {
+    if (!leadParaAbrir || loading) return
+    const lead = leads.find(l => String(l.id) === String(leadParaAbrir))
+    if (lead) {
+      setDrawerLead(lead)
+      onLeadAberto?.()
+    }
+  }, [leadParaAbrir, leads, loading, onLeadAberto])
 
   async function handleSalvar(form){
     if(novoDrawer) await criarLead(form)
@@ -1007,16 +1188,18 @@ export function PipelinePage({ perfil }) {
   return(
     <div>
       {/* Header — premium com glow ambiente */}
-      <div style={{position:'relative',marginBottom:24,padding:'22px 26px',borderRadius:20,overflow:'hidden',
+      <div style={{position:'relative',marginBottom:24,padding:'22px 26px',borderRadius:20,
         background:'linear-gradient(135deg,rgba(240,180,41,0.07) 0%,rgba(10,11,18,0.96) 55%)',
         border:'1px solid rgba(240,180,41,0.16)'}}>
-        {/* Orb decorativo animado */}
-        <motion.div animate={{x:[0,30,0],y:[0,-15,0]}} transition={{duration:12,repeat:Infinity,ease:'easeInOut'}}
-          style={{position:'absolute',top:-60,right:-40,width:220,height:220,borderRadius:'50%',
-          background:'radial-gradient(circle,rgba(240,180,41,0.18),transparent 70%)',filter:'blur(20px)',pointerEvents:'none'}} />
-        <motion.div animate={{x:[0,-20,0],y:[0,20,0]}} transition={{duration:14,repeat:Infinity,ease:'easeInOut'}}
-          style={{position:'absolute',bottom:-50,left:'30%',width:180,height:180,borderRadius:'50%',
-          background:'radial-gradient(circle,rgba(157,111,255,0.10),transparent 70%)',filter:'blur(24px)',pointerEvents:'none'}} />
+        {/* Orb decorativo animado — contido em wrapper próprio com overflow hidden */}
+        <div style={{position:'absolute',inset:0,overflow:'hidden',borderRadius:20,pointerEvents:'none',zIndex:0}}>
+          <motion.div animate={{x:[0,30,0],y:[0,-15,0]}} transition={{duration:12,repeat:Infinity,ease:'easeInOut'}}
+            style={{position:'absolute',top:-60,right:-40,width:220,height:220,borderRadius:'50%',
+            background:'radial-gradient(circle,rgba(240,180,41,0.18),transparent 70%)',filter:'blur(20px)'}} />
+          <motion.div animate={{x:[0,-20,0],y:[0,20,0]}} transition={{duration:14,repeat:Infinity,ease:'easeInOut'}}
+            style={{position:'absolute',bottom:-50,left:'30%',width:180,height:180,borderRadius:'50%',
+            background:'radial-gradient(circle,rgba(157,111,255,0.10),transparent 70%)',filter:'blur(24px)'}} />
+        </div>
 
         <div style={{position:'relative',zIndex:1,display:'flex',alignItems:'center',justifyContent:'space-between',gap:16,flexWrap:'wrap'}}>
           <div>
@@ -1038,11 +1221,15 @@ export function PipelinePage({ perfil }) {
           <div style={{display:'flex',gap:10,alignItems:'center',flexWrap:'wrap'}}>
             <BuscaGlobal leads={leads} onAbrir={setDrawerLead} />
 
-            <select value={filtroStatus} onChange={e=>setFiltroStatus(e.target.value)}
-              style={{padding:'9px 14px',background:'rgba(255,255,255,0.04)',border:'1px solid rgba(255,255,255,0.09)',borderRadius:11,color:filtroStatus?'#f0f1ff':'#4c5070',fontSize:12.5,outline:'none',cursor:'pointer',fontWeight:600}}>
-              <option value="">Todos os status</option>
-              {COLUNAS.map(c=><option key={c.id} value={c.id}>{c.label}</option>)}
-            </select>
+            <div style={{ width:170 }}>
+              <SelectCustom
+                value={filtroStatus}
+                onChange={setFiltroStatus}
+                placeholder="Todos os status"
+                accentColor="#f0b429"
+                options={COLUNAS.map(c=>({value:c.id,label:c.label}))}
+              />
+            </div>
 
             <div style={{display:'flex',background:'rgba(255,255,255,0.04)',border:'1px solid rgba(255,255,255,0.09)',borderRadius:11,overflow:'hidden',padding:2}}>
               {[['kanban','⬛'],['lista','☰']].map(([v,l])=>(

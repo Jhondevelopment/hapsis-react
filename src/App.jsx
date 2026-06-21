@@ -40,11 +40,19 @@ function PlaceholderPage({ tab }) {
 
 function AppShell({ perfil, onSignOut }) {
   const [activeTab, setActiveTab] = useState('dashboard')
+  // Lead a ser aberto automaticamente no Pipeline (vindo da busca do Topbar)
+  const [leadParaAbrir, setLeadParaAbrir] = useState(null)
+
+  // Chamado pelo Topbar quando o usuário clica num resultado da busca
+  const abrirLeadNoPipeline = useCallback((leadId) => {
+    setLeadParaAbrir(leadId)
+    setActiveTab('pipeline')
+  }, [])
 
   const renderPage = useCallback(() => {
     switch (activeTab) {
       case 'dashboard':     return <DashboardPage    key={activeTab} perfil={perfil} />
-      case 'pipeline':      return <PipelinePage     key={activeTab} perfil={perfil} />
+      case 'pipeline':      return <PipelinePage     key={activeTab} perfil={perfil} leadParaAbrir={leadParaAbrir} onLeadAberto={() => setLeadParaAbrir(null)} />
       case 'clientes':      return <ClientesPage     key={activeTab} perfil={perfil} />
       case 'agenda':        return <AgendaPage        key={activeTab} perfil={perfil} />
       case 'arena':         return <ArenaPage         key={activeTab} perfil={perfil} />
@@ -68,11 +76,11 @@ function AppShell({ perfil, onSignOut }) {
       case 'perfil':        return <PerfilPage        key={activeTab} perfil={perfil} />
       default:              return <PlaceholderPage   key={activeTab} tab={activeTab} />
     }
-  }, [activeTab, perfil])
+  }, [activeTab, perfil, leadParaAbrir])
 
   return (
     <div style={{ position:'relative', display:'flex', flexDirection:'column', minHeight:'100vh', zIndex:1 }}>
-      <Topbar perfil={perfil} onSignOut={onSignOut} />
+      <Topbar perfil={perfil} onSignOut={onSignOut} onAbrirLead={abrirLeadNoPipeline} />
       <div style={{ display:'flex', flex:1, overflow:'hidden', height:'calc(100vh - 60px)' }}>
         <Sidebar activeTab={activeTab} onTabChange={setActiveTab} perfil={perfil} />
         <main style={{ flex:1, overflowY:'auto', padding:'26px 30px', position:'relative' }}>
